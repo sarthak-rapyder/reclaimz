@@ -1,0 +1,272 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template to create VPC, public and private Subnets, IGW, NAT Gateway, RouteTables'
+Parameters:
+  ProjectName:
+    Description: Name of the Project
+    Type: String  
+  Environment:
+    Description: Environment
+    Type: String   
+  VpcCidrBlock:
+    Type: String
+    Description: CIDR block for the VPC
+  PublicSubnet1CidrBlock:
+    Type: String
+    Description: CIDR block for the first public subnet
+  PublicSubnet2CidrBlock:
+    Type: String
+    Description: CIDR block for the second public subnet
+  PrivateSubnet1CidrBlock:
+    Type: String
+    Description: CIDR block for the first app subnet
+  PrivateSubnet2CidrBlock:
+    Type: String
+    Description: CIDR block for the second app subnet
+  PrivateDBSubnet1CidrBlock:
+    Type: String
+    Description: CIDR block for the first DB subnet
+  PrivateDBSubnet2CidrBlock:
+    Type: String
+    Description: CIDR block for the second DB subnet
+
+
+Resources:
+  # VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "vpc" ] ]
+        - Key: Env
+          Value: !Ref Environment  
+
+  # Internet Gateway
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "igw" ] ]
+        - Key: Env
+          Value: !Ref Environment  
+
+  # Attach Internet Gateway to VPC
+  IGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW
+
+  # Public Subnet 1
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1CidrBlock
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "public-subnet-1a" ] ]
+        - Key: Env
+          Value: !Ref Environment
+ 
+  # Public Subnet 2
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet2CidrBlock
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "public-subnet-1b" ] ]
+        - Key: Env
+          Value: !Ref Environment 
+
+  # Private app Subnet 1
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet1CidrBlock
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "app-subnet-1a" ] ]
+        - Key: Env
+          Value: !Ref Environment
+
+  # Private app Subnet 2
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnet2CidrBlock
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "app-subnet-1b" ] ]
+        - Key: Env
+          Value: !Ref Environment
+
+  # Private DB Subnet 1
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateDBSubnet1CidrBlock
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-subnet-1a" ] ]
+        - Key: Env
+          Value: !Ref Environment
+
+  # Private DB Subnet 2
+  PrivateSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateDBSubnet2CidrBlock
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-subnet-1b" ] ]
+        - Key: Env
+          Value: !Ref Environment          
+
+  #NAT Gateway EIP
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "natgw-eip" ] ]
+        - Key: Env
+          Value: !Ref Environment 
+
+  # NAT Gateway
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "natgw" ] ]
+        - Key: Env
+          Value: !Ref Environment
+  
+  PublicRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "Public-RouteTable" ] ]
+        - Key: Env
+          Value: !Ref Environment
+
+  PrivateRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "Private-RouteTable" ] ]
+        - Key: Env
+          Value: !Ref Environment 
+
+  PublicRoute:
+    Type: "AWS::EC2::Route"
+    DependsOn: IGWAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+
+  PrivateRoute:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  PublicSubnetRouteAssociation1:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnetRouteAssociation2:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  PrivateSubnetRouteAssociation1:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateSubnetRouteAssociation2:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet2
+
+  PrivateSubnetRouteAssociation3:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet3
+
+  PrivateSubnetRouteAssociation4:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet4      
+
+Outputs:
+  VPCId:
+    Value: !Ref VPC
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "prod-VPCId" ] ]
+
+  PublicSubnet1Id:
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "PublicSubnet1Id" ] ]
+
+  PublicSubnet2Id:
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "PublicSubnet2Id" ] ]
+
+  PrivateSubnet1Id:
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "PrivateSubnet1Id" ] ]
+
+  PrivateSubnet2Id:
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "PrivateSubnet2Id" ] ]
+
+  PrivateSubnet3Id:
+    Value: !Ref PrivateSubnet3
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "DBSubnet1Id" ] ]
+
+  PrivateSubnet4Id:
+    Value: !Ref PrivateSubnet4
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "DBSubnet2Id" ] ]
