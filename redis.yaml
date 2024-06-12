@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS CloudFormation template for Redis Cluster'
+Description: 'AWS CloudFormation template for Redis Cluster with KMS encryption'
 
 Parameters:
   VpcId:
@@ -30,6 +30,9 @@ Parameters:
     Description: "The number of replicas per shard"
     Type: Number
     Default: 1
+  KmsKeyId:
+    Description: "The KMS key ID for encryption"
+    Type: String
 
 Resources:
   RedisSubnetGroup:
@@ -72,6 +75,10 @@ Resources:
       SecurityGroupIds: 
         - Ref: SecurityGroupId
       AutomaticFailoverEnabled: true
+      AtRestEncryptionEnabled: true
+      TransitEncryptionEnabled: true
+      KmsKeyId: 
+        Ref: KmsKeyId
 
 Outputs:
   RedisClusterPrimaryEndpoint:
