@@ -1,86 +1,89 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS CloudFormation template to create a Redis cluster with KMS encryption, referencing outputs from the VPC stack'
+Description: 'AWS CloudFormation template for Redis Cluster'
 
 Parameters:
-  ProjectName:
-    Description: Name of the Project
-    Type: String  
-  Environment:
-    Description: Environment
-    Type: String 
+  VpcId:
+    Description: "The VPC ID for the Redis cluster"
+    Type: String
+  Subnet1Id:
+    Description: "The first subnet ID for the Redis cluster"
+    Type: String
+  Subnet2Id:
+    Description: "The second subnet ID for the Redis cluster"
+    Type: String
+  SecurityGroupId:
+    Description: "The security group ID for the Redis cluster"
+    Type: String
   RedisNodeType:
-    Description: The instance type for the Redis cluster nodes
+    Description: "The instance type for the Redis nodes"
     Type: String
-    Default: cache.t3.medium
-  RedisNumNodes:
-    Description: Number of cache nodes in the Redis cluster
+    Default: "cache.t3.micro"
+  RedisClusterName:
+    Description: "The name of the Redis cluster"
+    Type: String
+    Default: "my-redis-cluster"
+  RedisNumShards:
+    Description: "The number of shards in the Redis cluster"
     Type: Number
-    Default: 2
-  KMSKeyArn:
-    Description: ARN of the KMS key for encryption
-    Type: String
+    Default: 1
+  RedisNumReplicas:
+    Description: "The number of replicas per shard"
+    Type: Number
+    Default: 1
 
 Resources:
-  # Security Group for Redis
-  RedisSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties: 
-      GroupDescription: Security Group for Redis Cluster
-      VpcId: !Sub "${ProjectName}-${Environment}-VPCId"
-      Tags: 
-        - Key: Name
-          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "redis-sg" ] ]
-        - Key: Env
-          Value: !Ref Environment 
-
-  # Redis Subnet Group
   RedisSubnetGroup:
-    Type: AWS::ElastiCache::SubnetGroup
+    Type: "AWS::ElastiCache::SubnetGroup"
     Properties: 
-      Description: Subnet group for Redis cluster
+      Description: "Subnet group for Redis cluster"
       SubnetIds: 
-        - !Sub "${ProjectName}-${Environment}-PrivateSubnet1Id"
-        - !Sub "${ProjectName}-${Environment}-PrivateSubnet2Id"
-      CacheSubnetGroupName: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "redis-subnet-group" ] ]
+        - Ref: Subnet1Id
+        - Ref: Subnet2Id
+      CacheSubnetGroupName: 
+        !Sub "${RedisClusterName}-subnet-group"
 
-  # Redis Cluster
-  RedisCluster:
-    Type: AWS::ElastiCache::ReplicationGroup
+  RedisSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
     Properties: 
-      ReplicationGroupDescription: Redis cluster with KMS encryption
-      ReplicationGroupId: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "redis" ] ]
-      NodeType: !Ref RedisNodeType
-      CacheParameterGroupName: default.redis6.x
-      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      GroupDescription: "Security group for Redis cluster"
+      VpcId: 
+        Ref: VpcId
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: 0.0.0.0/0
+
+  RedisReplicationGroup:
+    Type: "AWS::ElastiCache::ReplicationGroup"
+    Properties: 
+      ReplicationGroupId: 
+        Ref: RedisClusterName
+      ReplicationGroupDescription: "Redis replication group"
+      CacheNodeType: 
+        Ref: RedisNodeType
+      Engine: "redis"
+      NumNodeGroups: 
+        Ref: RedisNumShards
+      ReplicasPerNodeGroup: 
+        Ref: RedisNumReplicas
+      CacheSubnetGroupName: 
+        Ref: RedisSubnetGroup
       SecurityGroupIds: 
-        - !Ref RedisSecurityGroup
-      NumCacheClusters: !Ref RedisNumNodes
-      AtRestEncryptionEnabled: true
-      TransitEncryptionEnabled: true
-      KmsKeyId: !Ref KMSKeyArn
+        - Ref: SecurityGroupId
       AutomaticFailoverEnabled: true
-      MultiAZEnabled: true
-      Tags:
-        - Key: Name
-          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "redis-cluster" ] ]
-        - Key: Env
-          Value: !Ref Environment 
 
 Outputs:
-  RedisEndpoint:
-    Description: The endpoint address of the Redis cluster
-    Value: !GetAtt RedisCluster.PrimaryEndPoint.Address
-    Export:
-      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "RedisEndpoint" ] ]
+  RedisClusterPrimaryEndpoint:
+    Description: "Primary endpoint address of the Redis cluster"
+    Value: 
+      !GetAtt 
+        - RedisReplicationGroup
+        - PrimaryEndPoint.Address
 
-  RedisPort:
-    Description: The endpoint port of the Redis cluster
-    Value: !GetAtt RedisCluster.PrimaryEndPoint.Port
-    Export:
-      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "RedisPort" ] ]
-
-  RedisSecurityGroupId:
-    Description: Security Group ID for the Redis cluster
-    Value: !Ref RedisSecurityGroup
-    Export:
-      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "RedisSecurityGroupId" ] ]
+  RedisClusterReaderEndpoint:
+    Description: "Reader endpoint address of the Redis cluster"
+    Value: 
+      !GetAtt 
+        - RedisReplicationGroup
+        - ReaderEndPoint.Address

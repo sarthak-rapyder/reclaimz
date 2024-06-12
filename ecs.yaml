@@ -1,0 +1,216 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template to create an ECS Cluster with Services, Task Definitions, and ALB'
+
+Parameters:
+  ProjectName:
+    Description: Name of the Project
+    Type: String  
+  Environment:
+    Description: Environment (dev, staging, prod)
+    Type: String
+  ClusterName:
+    Description: Name of the ECS Cluster
+    Type: String
+    Default: ecs-cluster
+  ServiceName:
+    Description: Name of the ECS Service
+    Type: String
+    Default: ecs-service
+  TaskDefinitionName:
+    Description: Name of the ECS Task Definition
+    Type: String
+    Default: ecs-task
+  ContainerName:
+    Description: Name of the Container
+    Type: String
+    Default: ecs-container
+  ContainerImage:
+    Description: Docker image for the container
+    Type: String
+  ContainerPort:
+    Description: Port on which the container will run
+    Type: Number
+    Default: 80
+  DesiredCount:
+    Description: Desired number of tasks
+    Type: Number
+    Default: 2
+  VpcId:
+    Description: VPC ID for the ECS cluster
+    Type: String
+    Default: !ImportValue
+      Fn::Sub: "${ProjectName}-${Environment}-VPCId"
+  Subnet1:
+    Description: First Subnet ID for the ECS tasks
+    Type: String
+    Default: !ImportValue
+      Fn::Sub: "${ProjectName}-${Environment}-PublicSubnet1Id"
+  Subnet2:
+    Description: Second Subnet ID for the ECS tasks
+    Type: String
+    Default: !ImportValue
+      Fn::Sub: "${ProjectName}-${Environment}-PublicSubnet2Id"
+  SecurityGroupId:
+    Description: Security Group ID for the ECS tasks
+    Type: String
+    Default: !ImportValue
+      Fn::Sub: "${ProjectName}-${Environment}-db-sg"
+  KMSKeyId:
+    Description: KMS Key ID for encryption
+    Type: String
+    Default: !ImportValue
+      Fn::Sub: "${ProjectName}-${Environment}-kms-key-Id"
+  ALBName:
+    Description: Name of the Application Load Balancer
+    Type: String
+    Default: ecs-alb
+
+Resources:
+  # ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ClusterName
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ecs-cluster" ] ]
+        - Key: Env
+          Value: !Ref Environment
+  
+  # ECS Task Definition
+  ECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref TaskDefinitionName
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+        - Name: !Ref ContainerName
+          Image: !Ref ContainerImage
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "log-group" ] ]
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: ecs
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ecs-task" ] ]
+        - Key: Env
+          Value: !Ref Environment
+
+  # Application Load Balancer
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Ref ALBName
+      Scheme: internet-facing
+      Subnets:
+        - !Ref Subnet1
+        - !Ref Subnet2
+      SecurityGroups:
+        - !Ref SecurityGroupId
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "alb" ] ]
+        - Key: Env
+          Value: !Ref Environment
+
+  # ALB Target Group
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "tg" ] ]
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      HealthCheckPath: /
+      TargetType: ip
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "tg" ] ]
+        - Key: Env
+          Value: !Ref Environment
+
+  # ALB Listener
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+
+  # ECS Service
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      TaskDefinition: !Ref ECSTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets:
+            - !Ref Subnet1
+            - !Ref Subnet2
+          SecurityGroups:
+            - !Ref SecurityGroupId
+          AssignPublicIp: ENABLED
+      LoadBalancers:
+        - ContainerName: !Ref ContainerName
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref ALBTargetGroup
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ecs-service" ] ]
+        - Key: Env
+          Value: !Ref Environment
+
+  # CloudWatch Log Group
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "log-group" ] ]
+      RetentionInDays: 7
+
+Outputs:
+  ClusterName:
+    Description: Name of the ECS Cluster
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ECSClusterName" ] ]
+
+  ServiceName:
+    Description: Name of the ECS Service
+    Value: !Ref ECSService
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ECSServiceName" ] ]
+
+  TaskDefinitionArn:
+    Description: ARN of the ECS Task Definition
+    Value: !Ref ECSTaskDefinition
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ECSTaskDefinitionArn" ] ]
+
+  ALBName:
+    Description: Name of the Application Load Balancer
+    Value: !Ref ALB
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ALBName" ] ]
+
+  ALBListenerArn:
+    Description: ARN of the ALB Listener
+    Value: !Ref ALBListener
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ALBListenerArn" ] ]
