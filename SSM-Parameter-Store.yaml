@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create AWS Systems Manager Parameter Store parameters
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+      - Label:
+          default: 'SSM Parameters'
+        Parameters:
+          - DBUserParameterName
+          - DBUser
+          - DBPwdParameterName
+          - DBPassword
+
+Parameters:
+  ProjectName:
+    Description: Name of the Project
+    Type: String  
+  Environment:
+    Description: Environment (dev, staging, prod)
+    Type: String 
+  DBUserParameterName:
+    Description: The SSM Parameter Name for DB User Parameter (ex- /prod/rcz-fin/db-user)
+    Type: String
+  DBUser:
+    Description: The database admin account username (must begin with a letter and contain only alphanumeric characters (ex; postgres))
+    Type: String
+    Default: postgres
+    MinLength: 1
+    MaxLength: 16
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters (ex; postgres).
+  DBPwdParameterName:
+    Description: The SSM Parameter Name for DB Password Parameter (ex- /prod/rcz-fin/db-pwd)
+    Type: String  
+  DBPassword:
+    Description: The database admin account password (must contain only alphanumeric characters [a-zA-Z][a-zA-Z0-9#!$-_?]*)
+    Type: String
+    NoEcho: true  # Hides password input during parameter selection
+    MinLength: 1
+    MaxLength: 41
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9#!$-_?]*"
+    ConstraintDescription: must contain only alphanumeric characters.    
+
+Resources:
+#SSM Parameter Store for RDS user and password
+  DBUserParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref DBUserParameterName
+      Description: "Username for the database"
+      Value: !Ref DBUser
+      Type: String
+      Tags:
+        Name: !Ref DBUserParameterName
+        Env: !Ref Environment
+  DBPwdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref DBPwdParameterName
+      Description: "Password for the database"
+      Value: !Ref DBPassword
+      Type: String
+      Tags:
+        Name: !Ref DBPwdParameterName
+        Env: !Ref Environment 
+
+        
