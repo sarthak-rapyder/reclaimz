@@ -127,7 +127,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "subnet-group" ] ]
-        - Key: Env
+        - Key: Environment
           Value: !Ref Environment
         - Key: TenantType  
           Value: !Ref TenantType
@@ -159,7 +159,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db" ] ]
-        - Key: Env
+        - Key: Environment
           Value: !Ref Environment        
         - Key: TenantType  
           Value: !Ref TenantType
@@ -181,7 +181,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-sg" ] ]
-        - Key: Env
+        - Key: Environment
           Value: !Ref Environment
         - Key: TenantType  
           Value: !Ref TenantType
