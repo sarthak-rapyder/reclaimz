@@ -8,6 +8,7 @@ Metadata:
         Parameters:
           - ProjectName
           - Environment
+          - TenantType
       - Label:
           default: 'S3 and CloudFront Parameters'
         Parameters:
@@ -19,7 +20,10 @@ Parameters:
     Type: String  
   Environment:
     Description: Environment (dev, staging, prod)
-    Type: String 
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String       
   s3BucketName:
     Description: Name of the S3 Bucket
     Type: String
@@ -35,8 +39,12 @@ Resources:
       Tags:
         - Key: Name
           Value: !Ref s3BucketName
-        - Key: Env
-          Value: !Ref Environment        
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName         
 
   BucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -102,9 +110,13 @@ Resources:
       Tags:
         - Key: Name
           Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "cloudfront" ] ] 
-        - Key: Env
+        - Key: Environment
           Value: !Ref Environment  
-
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName 
+          
 Outputs:
   DistributionDomainName:
     Value: !GetAtt CloudFrontDistribution.DomainName          
