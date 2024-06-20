@@ -56,6 +56,8 @@ Mappings:
       AMIID: ami-0de53d8956e8dcf80
     us-west-2:
       AMIID: ami-0d6621c01e8c2de2c
+    us-east-2:
+      AMIID: ami-033fabdd332044f06
     # Add other regions and their AMIs as needed
 
 Resources:
