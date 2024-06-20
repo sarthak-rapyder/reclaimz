@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS CloudFormation Template for Private ECS Cluster with ALB, Services, Task Definitions, and Service Connect'
+Description: 'AWS CloudFormation Template for Private ECS Fargate Cluster with ALB, Services, Task Definitions, and Service Connect'
 
 Parameters:
   VpcId:
@@ -11,13 +11,10 @@ Parameters:
   PrivateSubnet2Id:
     Description: "Private Subnet 2 ID"
     Type: String
-  InstanceType:
-    Description: "EC2 instance type for ECS cluster"
-    Type: String
-    Default: t2.micro
   KeyName:
     Description: "EC2 Key Pair for SSH access"
-    Type: AWS::EC2::KeyPair::KeyName
+    Type: String
+    Default: ""
   ClusterName:
     Description: "Name of the ECS cluster"
     Type: String
@@ -56,17 +53,59 @@ Mappings:
       AMIID: ami-0de53d8956e8dcf80
     us-west-2:
       AMIID: ami-0d6621c01e8c2de2c
-    us-east-2:
-      AMIID: ami-033fabdd332044f06
     # Add other regions and their AMIs as needed
 
 Resources:
-  ECSCluster:
-    Type: AWS::ECS::Cluster
+  KeyPair:
+    Type: Custom::EC2KeyPair
+    Condition: CreateKeyPair
     Properties:
-      ClusterName: !Ref ClusterName
+      ServiceToken: !GetAtt KeyPairLambdaFunction.Arn
+      KeyName: !Sub "${AWS::StackName}-keypair"
 
-  ECSClusterRole:
+  KeyPairLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+
+          def lambda_handler(event, context):
+              try:
+                  ec2 = boto3.client('ec2')
+                  
+                  if event['RequestType'] == 'Create':
+                      key_pair_name = event['ResourceProperties']['KeyName']
+                      
+                      # Generate key pair
+                      key_pair = ec2.create_key_pair(KeyName=key_pair_name)
+                      response_data = {
+                          'KeyName': key_pair['KeyName'],
+                          'KeyMaterial': key_pair['KeyMaterial']
+                      }
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+                  
+                  elif event['RequestType'] == 'Delete':
+                      key_pair_name = event['ResourceProperties']['KeyName']
+                      
+                      # Delete key pair
+                      ec2.delete_key_pair(KeyName=key_pair_name)
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      
+                  else:
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+                      
+              except Exception as e:
+                  print(e)
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {})
+
+      Runtime: python3.8
+      Timeout: 300
+
+  LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -74,118 +113,23 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: ecs.amazonaws.com
+              Service: lambda.amazonaws.com
             Action: sts:AssumeRole
-      Path: /
       Policies:
-        - PolicyName: ecs-service
+        - PolicyName: LambdaEC2Policy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - ecs:CreateCluster
-                  - ecs:DeregisterContainerInstance
-                  - ecs:DiscoverPollEndpoint
-                  - ecs:Poll
-                  - ecs:RegisterContainerInstance
-                  - ecs:StartTelemetrySession
-                  - ecs:UpdateContainerInstancesState
-                  - ecs:Submit*
+                  - ec2:CreateKeyPair
+                  - ec2:DeleteKeyPair
                 Resource: "*"
 
-  ECSClusterInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
+  ECSCluster:
+    Type: AWS::ECS::Cluster
     Properties:
-      Roles:
-        - Ref: ECSClusterRole
-
-  ECSAutoScalingGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    Properties:
-      VPCZoneIdentifier:
-        - Ref: PrivateSubnet1Id
-        - Ref: PrivateSubnet2Id
-      LaunchConfigurationName: !Ref ECSLaunchConfiguration
-      MinSize: '1'
-      MaxSize: '3'
-      DesiredCapacity: '1'
-
-  ECSLaunchConfiguration:
-    Type: AWS::AutoScaling::LaunchConfiguration
-    Properties:
-      ImageId: !FindInMap [AWSRegionToAMI, !Ref "AWS::Region", AMIID]
-      InstanceType: !Ref InstanceType
-      KeyName: !Ref KeyName
-      IamInstanceProfile: !Ref ECSClusterInstanceProfile
-      SecurityGroups:
-        - Ref: ECSSecurityGroup
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          echo ECS_CLUSTER=${ClusterName} >> /etc/ecs/ecs.config
-
-  ECSSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: "Security group for ECS instances"
-      VpcId: !Ref VpcId
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
-
-  ALB:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Name: !Sub "${ClusterName}-alb"
-      Subnets:
-        - Ref: PrivateSubnet1Id
-        - Ref: PrivateSubnet2Id
-      SecurityGroups:
-        - Ref: ALBSecurityGroup
-      Scheme: internal
-
-  ALBSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: "Security group for ALB"
-      VpcId: !Ref VpcId
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          SourceSecurityGroupId: !Ref ECSSecurityGroup
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
-
-  ALBTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: !Sub "${ClusterName}-tg"
-      Port: 80
-      Protocol: HTTP
-      VpcId: !Ref VpcId
-      TargetType: ip
-
-  ALBListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref ALBTargetGroup
-      LoadBalancerArn: !Ref ALB
-      Port: 80
-      Protocol: HTTP
+      ClusterName: !Ref ClusterName
 
   ECSServiceRole:
     Type: AWS::IAM::Role
@@ -205,9 +149,6 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - elasticloadbalancing:DeregisterTargets
-                  - elasticloadbalancing:RegisterTargets
-                  - elasticloadbalancing:Describe*
                   - ecs:CreateCluster
                   - ecs:DeregisterContainerInstance
                   - ecs:DiscoverPollEndpoint
@@ -244,32 +185,102 @@ Resources:
                   - kms:Decrypt
                 Resource: "*"
 
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for ECS tasks"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${ClusterName}-alb"
+      Subnets:
+        - Ref: PrivateSubnet1Id
+        - Ref: PrivateSubnet2Id
+      SecurityGroups:
+        - Ref: ALBSecurityGroup
+      Scheme: internal
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for ALB"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: 200
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+
   ECSTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: !Ref TaskDefinitionFamily
-      ExecutionRoleArn: !Ref ECSTaskExecutionRole
-      ContainerDefinitions:
-        - Name: !Ref ServiceName
-          Image: !Ref ContainerImage
-          Essential: true
-          Memory: 512
-          Cpu: 256
-          PortMappings:
-            - ContainerPort: !Ref ContainerPort
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      Cpu: '256'
-      Memory: '512'
+      Cpu: 256
+      Memory: 512
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: !Ref ServiceName
+          Image: !Ref ContainerImage
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub "/ecs/${ClusterName}"
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: ecs
 
   ECSService:
     Type: AWS::ECS::Service
-    DependsOn: ALBListener
     Properties:
       Cluster: !Ref ECSCluster
-      TaskDefinition: !Ref ECSTaskDefinition
       DesiredCount: !Ref DesiredCount
+      TaskDefinition: !Ref ECSTaskDefinition
       LaunchType: FARGATE
       NetworkConfiguration:
         AwsvpcConfiguration:
@@ -289,13 +300,9 @@ Outputs:
     Description: "ECS Cluster Name"
     Value: !Ref ECSCluster
 
-  ECSClusterRoleARN:
-    Description: "ECS Cluster Role ARN"
-    Value: !GetAtt ECSClusterRole.Arn
-
-  ECSServiceName:
-    Description: "ECS Service Name"
-    Value: !Ref ECSService
+  ECSServiceRoleARN:
+    Description: "ECS Service Role ARN"
+    Value: !GetAtt ECSServiceRole.Arn
 
   ECSTaskDefinitionARN:
     Description: "ECS Task Definition ARN"
@@ -312,3 +319,9 @@ Outputs:
   ALBTargetGroupARN:
     Description: "ALB Target Group ARN"
     Value: !Ref ALBTargetGroup
+
+Conditions:
+  CreateKeyPair:
+    Fn::Equals: [!Ref KeyName, ""]
+  HasKeyName:
+    Fn::Not: [!Condition CreateKeyPair]
