@@ -8,6 +8,7 @@ Metadata:
         Parameters:
           - ProjectName
           - Environment
+          - TenantType
       - Label:
           default: 'RDS Parameters'
         Parameters:
@@ -34,7 +35,10 @@ Parameters:
     Type: String  
   Environment:
     Description: Environment (dev, staging, prod)
-    Type: String 
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String        
   VPCId:
     Description: "The VPC ID for RDS"
     Type: String
@@ -124,7 +128,11 @@ Resources:
         - Key: Name
           Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "subnet-group" ] ]
         - Key: Env
-          Value: !Ref Environment  
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName          
 
 #RDS Instance      
   MyDBInstance:
@@ -153,7 +161,11 @@ Resources:
           Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db" ] ]
         - Key: Env
           Value: !Ref Environment        
-
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName
+          
 #RDS Security Group
   MyDBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -171,7 +183,11 @@ Resources:
           Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-sg" ] ]
         - Key: Env
           Value: !Ref Environment
-
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName
+          
 Outputs:
   DBEndpoint:
     Description: "Endpoint address of the RDS database"
