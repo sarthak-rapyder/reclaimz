@@ -8,6 +8,7 @@ Metadata:
         Parameters:
           - ProjectName
           - Environment
+          - TenantType
       - Label:
           default: 'KMS key Parameters'
         Parameters:
@@ -19,7 +20,10 @@ Parameters:
     Type: String  
   Environment:
     Description: Environment (dev, staging, prod)
-    Type: String   
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String    
   MultiRegion:
     Type: String
     Description: Enable Multi-Region key (true or false)
@@ -38,8 +42,12 @@ Resources:
       Tags:
         - Key: Name
           Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "kms-key" ] ]
-        - Key: Env
+        - Key: Environment
           Value: !Ref Environment 
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName          
   KMSAlias:
     Type: AWS::KMS::Alias
     Properties:
