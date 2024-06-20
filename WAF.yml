@@ -9,6 +9,7 @@ Metadata:
       Parameters:
       - ProjectName
       - Environment
+      - TenantType
     - Label:
         default: 'WAF Parameters'
       Parameters:
@@ -35,7 +36,10 @@ Parameters:
     Type: String  
   Environment:
     Description: Environment (dev, staging, prod)
-    Type: String   
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String     
   Scope:
     Description: 'Specify wether WAF shall be used with CloudFront (us-east-1 only!) or regional (ALB, API Gateway, and AppSync).'
     Type: String
@@ -429,8 +433,12 @@ Resources:
       Tags:
         - Key: Name
           Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "waf" ] ]
-        - Key: Env
+        - Key: Environment
           Value: !Ref Environment   
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName         
 
 Outputs:
   WebACL:
