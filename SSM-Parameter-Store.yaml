@@ -8,6 +8,7 @@ Metadata:
         Parameters:
           - ProjectName
           - Environment
+          - TenantType
       - Label:
           default: 'SSM Parameters'
         Parameters:
@@ -22,7 +23,10 @@ Parameters:
     Type: String  
   Environment:
     Description: Environment (dev, staging, prod)
-    Type: String 
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String    
   DBUserParameterName:
     Description: The SSM Parameter Name for DB User Parameter (ex- /prod/rcz-fin/db-user)
     Type: String
@@ -58,6 +62,8 @@ Resources:
       Tags:
         Name: !Ref DBUserParameterName
         Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName
   DBPwdParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -68,5 +74,7 @@ Resources:
       Tags:
         Name: !Ref DBPwdParameterName
         Env: !Ref Environment 
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName        
 
         
