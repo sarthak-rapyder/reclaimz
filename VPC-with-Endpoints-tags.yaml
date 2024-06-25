@@ -255,6 +255,20 @@ Resources:
         - Key: Project
           Value: !Ref ProjectName
 
+  PrivateDBRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "Private-DB-RouteTable" ] ]
+        - Key: Environment
+          Value: !Ref Environment 
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName          
+
   PublicRoute:
     Type: "AWS::EC2::Route"
     DependsOn: IGWAttachment
@@ -297,13 +311,13 @@ Resources:
   PrivateSubnetRouteAssociation3:
     Type: "AWS::EC2::SubnetRouteTableAssociation"
     Properties:
-      RouteTableId: !Ref PrivateRouteTable
+      RouteTableId: !Ref PrivateDBRouteTable
       SubnetId: !Ref PrivateSubnet3
 
   PrivateSubnetRouteAssociation4:
     Type: "AWS::EC2::SubnetRouteTableAssociation"
     Properties:
-      RouteTableId: !Ref PrivateRouteTable
+      RouteTableId: !Ref PrivateDBRouteTable
       SubnetId: !Ref PrivateSubnet4      
 
 #Endpoints
