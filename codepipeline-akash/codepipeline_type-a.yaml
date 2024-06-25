@@ -1,0 +1,441 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Deploys CodePipeline with Source, Codebuild and CFT Deploy Stages.
+
+Parameters:
+
+  CodeBuildBuildProjectName:
+    Description: CodeBuild Project Name
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    Default: default-codebuild-project
+
+  CodePipelineProjectName:
+    Description: CodePipeline Project Name
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    Default: default-codepipeline
+
+  S3BucketName:
+    Description: Type the BucketName.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    Default: default-codepipeline-artifact-bucket
+
+  VpcId:
+    Description: Type the VPC ID.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^vpc-[0-9a-f]{8,17}$
+
+  PrivateSubnet1:
+    Description: Type the PrivateSubnet2 ID for CodeBuild.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^subnet-[0-9a-f]{8,17}$
+
+  PrivateSubnet2:
+    Description: Type the PrivateSubnet2 ID for CodeBuild.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^subnet-[0-9a-f]{8,17}$
+
+  CodestarConnectionArn:
+    Description: Enter the foll ARN of the codestar connection.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^arn:aws:[a-zA-Z0-9-]+:[a-zA-Z0-9-]*:[0-9]*:[a-zA-Z0-9-:/]*$
+
+  FullRepositoryId1:
+    Description: Type the FullName of Repository for the CI Source 1.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+
+  BranchName1:
+    Description: Type the BranchName for the CI Source 1.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+
+  FullRepositoryId2:
+    Description: Type the FullName of Repository for the CI Source 2.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+
+  BranchName2:
+    Description: Type the BranchName for the CI Source 2.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+
+  CloudformationStackName:
+    Description: Type the Cloudformation Stack name for the deployment.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+
+  CloudformationFilePath:
+    Description: Enter the full path of Cloudformation stack.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+
+  CloudformationStackParameterOverrides:
+    Description: (Optional)Enter the input parameters for the Cloudformation Stack in JSON* format.
+    Type: String
+    MinLength: 1
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+
+  CloudFormationRole:
+    Description: Enter the full ARN of the IAM role to deploy Cloudformation stack.
+    Type: String
+    MinLength: 1
+    AllowedPattern: ^arn:aws:[a-zA-Z0-9-]+:[a-zA-Z0-9-]*:[0-9]*:[a-zA-Z0-9-:/]*$
+
+Resources:
+
+  S3BucketForCodePipeline:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${S3BucketName}
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${CodeBuildBuildProjectName}-codebuild-base-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${CodeBuildBuildProjectName}-logs
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${CodeBuildBuildProjectName}-logs:*
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:Createlogstream
+                  - logs:PutLogEvents
+              - Effect: Allow
+                Resource:
+                  - !Sub arn:aws:s3:::${S3BucketName}/*
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+        - PolicyName: !Sub ${CodeBuildBuildProjectName}-codebuild-vpc-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - '*'
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeVpcs
+              - Effect: Allow
+                Resource:
+                  - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                Action:
+                  - ec2:CreateNetworkInterfacePermission
+                Condition:
+                  StringEquals:
+                    ec2:Subnet:
+                      - PrivateSubnet1Arn
+                      - PrivateSubnet2Arn
+                    ec2:AuthorizedService: codebuild.amazonaws.com
+        - PolicyName: !Sub ${CodeBuildBuildProjectName}-ssm-parameterstore-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - '*'
+                Action:
+                  - ssm:DescribeParameters
+              - Effect: Allow
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+                Action:
+                  - ssm:GetParameters
+
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${CodePipelineProjectName}-codepipeline-base-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - elasticbeanstalk:*
+                  - ec2:*
+                  - elasticloadbalancing:*
+                  - autoscaling:*
+                  - cloudwatch:*
+                  - s3:*
+                  - sns:*
+                  - ':*'
+                  - rds:*
+                  - sqs:*
+                  - ecs:*
+                Resource: '*'
+                Effect: Allow
+              - Action:
+                  - codecommit:GetBranch
+                  - codecommit:GetCommit
+                  - codecommit:GetUploadArchiveStatus
+                  - codecommit:UploadArchive
+                  - codecommit:CancelUploadArchive
+                Resource: '*'
+                Effect: Allow
+              - Action:
+                  - codedeploy:CreateDeployment
+                  - codedeploy:GetApplicationRevision
+                  - codedeploy:GetDeployment
+                  - codedeploy:GetDeploymentConfig
+                  - codedeploy:RegisterApplicationRevision
+                Resource: '*'
+                Effect: Allow
+              - Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                Resource: '*'
+                Effect: Allow
+              - Action:
+                  - iam:PassRole
+                Resource: '*'
+                Effect: Allow
+                Condition:
+                  StringEqualsIfExists:
+                    iam:PassedToService:
+                      - .amazonaws.com
+                      - elasticbeanstalk.amazonaws.com
+                      - ec2.amazonaws.com
+                      - ecs-tasks.amazonaws.com
+              - Action:
+                  - lambda:InvokeFunction
+                  - lambda:ListFunctions
+                Resource: '*'
+                Effect: Allow
+              - Action:
+                  - opsworks:CreateDeployment
+                  - opsworks:DescribeApps
+                  - opsworks:DescribeCommands
+                  - opsworks:DescribeDeployments
+                  - opsworks:DescribeInstances
+                  - opsworks:DescribeStacks
+                  - opsworks:UpdateApp
+                  - opsworks:UpdateStack
+                Resource: '*'
+                Effect: Allow
+              - Action:
+                  - devicefarm:ListProjects
+                  - devicefarm:ListDevicePools
+                  - devicefarm:GetRun
+                  - devicefarm:GetUpload
+                  - devicefarm:CreateUpload
+                  - devicefarm:ScheduleRun
+                Resource: '*'
+                Effect: Allow
+              - Action:
+                  - servicecatalog:ListProvisioningArtifacts
+                  - servicecatalog:CreateProvisioningArtifacts
+                  - servicecatalog:DescribeProvisioningArtifacts
+                  - servicecatalog:DeleteProvisioningArtifacts
+                  - servicecatalog:UpdateProduct
+                Resource: '*'
+                Effect: Allow
+              - Action:
+                  - ecr:DescribeImages
+                Resource: '*'
+                Effect: Allow
+        - PolicyName: !Sub ${CodePipelineProjectName}-ssm-parameterstore-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - '*'
+                Action:
+                  - ssm:DescribeParameters
+              - Effect: Allow
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*
+                Action:
+                  - ssm:GetParameters
+
+  CodeBuildSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the public facing load balancer
+      GroupName: !Join [ "-", [ !Ref CodeBuildBuildProjectName, "sg" ] ]
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        # Allow access all traffic from VPC to the internet
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "-1"
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Ref CodeBuildBuildProjectName
+      Source:
+        Type: CODEPIPELINE
+        GitCloneDepth: 1
+        BuildSpec: buildspec.yaml
+      Environment:
+        PrivilegedMode: true
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariable:
+          - Name: MY_VAR_1
+            Type: PLAINTEXT
+            Value: VAR_1_VALUE
+          - Name: MY_VAR_2
+            Type: PLAINTEXT
+            Value: VAR_2_VALUE
+      ServiceRole: !Ref CodeBuildServiceRole
+      VpcConfig:
+        VpcId: !Ref VpcId
+        Subnets:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        SecurityGroupIds:
+          - !Ref CodeBuildSG
+      Artifacts:
+        Type: CODEPIPELINE
+      logsConfig:
+        CloudWatchlogs:
+          Status: ENABLED
+          GroupName: !Sub ${CodeBuildBuildProjectName}-logs
+
+  CodePipelineProject:
+    Type: AWS::CodePipeline::Pipeline
+    DependsOn: S3BucketForCodePipeline
+    Properties:
+      Name: CodePipeline
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      Stages:
+        - Name: Source1
+          Actions:
+            - Name: Source1
+              InputArtifacts: []
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: '1'
+                Provider: CodeStarSourceConnection
+              OutputArtifacts:
+                - Name: SourceArtifact1
+              Configuration:
+                BranchName: !Ref BranchName1
+                ConnectionArn: !Ref CodestarConnectionArn
+                FullRepositoryId: !Ref FullRepositoryId1
+              RunOrder: 1
+        - Name: Source2
+          Actions:
+            - Name: Source2
+              InputArtifacts: []
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: '1'
+                Provider: CodeStarSourceConnection
+              OutputArtifacts:
+                - Name: SourceArtifact2
+              Configuration:
+                BranchName: !Ref BranchName2
+                ConnectionArn: !Ref CodestarConnectionArn
+                FullRepositoryId: !Ref FullRepositoryId2
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: Build
+              InputArtifacts:
+                - Name: SourceArtifact1
+                - Name: SourceArtifact2
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              OutputArtifacts:
+                - Name: BuildArtifact
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              RunOrder: 2
+        - Name: Deploy
+          Actions:
+            - Name: Deploy
+              InputArtifacts:
+                - Name: BuildArtifact
+                - Name: SourceArtifact2
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              OutputArtifacts:
+                - OutputArtifact
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                Capabilities: CAPABILITY_NAMED_IAM
+                ChangeSetName: !Ref CloudformationStackName
+                ParameterOverrides: !Ref CloudformationStackParameterOverrides
+                RoleArn: !Ref CloudFormationRole
+                TemplateConfiguration: !Sub SourceArtifact2::${CloudformationFilePath}
+              RunOrder: 3
+      ArtifactStore:
+        Location: !Ref S3BucketName
+        Type: S3
