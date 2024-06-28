@@ -4,24 +4,24 @@ Description: Deploys CodePipeline with Source and Codebuild.
 
 Parameters:
 
-  CodeBuildBuildProjectName:
-    Description: CodeBuild Project Name
+  Environment:
+    Description: Type the environment Name.
     Type: String
     MinLength: 1
     MaxLength: 255
-    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
-    Default: default-codebuild-project
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z]*$
+    Default: dev
 
-  CodePipelineProjectName:
-    Description: CodePipeline Project Name
+  ApplicationName:
+    Description: Type the application Name.
     Type: String
     MinLength: 1
     MaxLength: 255
     AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
-    Default: default-codepipeline
+    Default: default
 
   S3BucketName:
-    Description: Type the BucketName.
+    Description: Type the S3 BucketName for storing artifacts.
     Type: String
     MinLength: 1
     MaxLength: 255
@@ -36,21 +36,21 @@ Parameters:
     AllowedPattern: ^vpc-[0-9a-f]{8,17}$
 
   PrivateSubnet1:
-    Description: Type the PrivateSubnet2 ID for CodeBuild.
+    Description: Type the PrivateSubnet1 ID in AZ-1a for CodeBuild.
     Type: String
     MinLength: 1
     MaxLength: 255
     AllowedPattern: ^subnet-[0-9a-f]{8,17}$
 
   PrivateSubnet2:
-    Description: Type the PrivateSubnet2 ID for CodeBuild.
+    Description: Type the PrivateSubnet2 ID in AZ-1b for CodeBuild.
     Type: String
     MinLength: 1
     MaxLength: 255
     AllowedPattern: ^subnet-[0-9a-f]{8,17}$
 
   CodestarConnectionArn:
-    Description: Enter the foll ARN of the codestar connection.
+    Description: Enter the foll ARN of the codestar connection for the Source.
     Type: String
     MinLength: 1
     MaxLength: 255
@@ -96,14 +96,14 @@ Resources:
             Action:
               - sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${CodeBuildBuildProjectName}-codebuild-base-policy
+        - PolicyName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-base-policy"] ]
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Resource:
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${CodeBuildBuildProjectName}-logs
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${CodeBuildBuildProjectName}-logs:*
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${Environment}-${ApplicationName}-codebuild-project-logs
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${Environment}-${ApplicationName}-codebuild-project-logs:*
                 Action:
                   - logs:CreateLogGroup
                   - logs:Createlogstream
@@ -117,7 +117,7 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:GetBucketAcl
                   - s3:GetBucketLocation
-        - PolicyName: !Sub ${CodeBuildBuildProjectName}-codebuild-vpc-policy
+        - PolicyName: !Sub ${Environment}-${ApplicationName}-codebuild-vpc-policy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -143,7 +143,7 @@ Resources:
                       - PrivateSubnet1Arn
                       - PrivateSubnet2Arn
                     ec2:AuthorizedService: codebuild.amazonaws.com
-        - PolicyName: !Sub ${CodeBuildBuildProjectName}-ssm-parameterstore-policy
+        - PolicyName: !Sub ${Environment}-${ApplicationName}-ssm-parameterstore-policy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -172,7 +172,7 @@ Resources:
             Action:
               - sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${CodePipelineProjectName}-codepipeline-base-policy
+        - PolicyName: !Sub ${Environment}-${ApplicationName}-codepipeline-base-policy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -259,7 +259,7 @@ Resources:
                   - ecr:DescribeImages
                 Resource: '*'
                 Effect: Allow
-        - PolicyName: !Sub ${CodePipelineProjectName}-ssm-parameterstore-policy
+        - PolicyName: !Sub ${Environment}-${ApplicationName}-ssm-parameterstore-policy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -278,7 +278,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to the public facing load balancer
-      GroupName: !Join [ "-", [ !Ref CodeBuildBuildProjectName, "sg" ] ]
+      GroupName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "sg" ] ]
       VpcId: !Ref VpcId
       SecurityGroupEgress:
         # Allow access all traffic from VPC to the internet
@@ -288,7 +288,7 @@ Resources:
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: !Ref CodeBuildBuildProjectName
+      Name: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-project" ] ]
       Source:
         Type: CODEPIPELINE
         GitCloneDepth: 1
@@ -318,7 +318,7 @@ Resources:
       logsConfig:
         CloudWatchlogs:
           Status: ENABLED
-          GroupName: !Sub ${CodeBuildBuildProjectName}-logs
+          GroupName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-project-logs" ] ]
 
   CodePipelineProject:
     Type: AWS::CodePipeline::Pipeline

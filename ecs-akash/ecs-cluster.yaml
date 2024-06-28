@@ -24,7 +24,7 @@ Resources:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ecs-cluster" ] ]
-    ClusterSettings:
+      ClusterSettings:
         - Name: containerInsights
           Value: !Ref ContainerInsights
 
@@ -65,31 +65,31 @@ Resources:
                 Resource: '*'
 
   # This is a role which is used by the ECS tasks themselves.
-  ECSTaskExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - ecs-tasks.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      Path: /
-      Policies:
-        - PolicyName: AmazonECSTaskExecutionRolePolicy
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ecr:GetAuthorizationToken
-                  - ecr:BatchCheckLayerAvailability
-                  - ecr:GetDownloadUrlForLayer
-                  - ecr:BatchGetImage
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: '*'
+  # ECSTaskExecutionRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service:
+  #               - ecs-tasks.amazonaws.com
+  #           Action:
+  #             - sts:AssumeRole
+  #     Path: /
+  #     Policies:
+  #       - PolicyName: AmazonECSTaskExecutionRolePolicy
+  #         PolicyDocument:
+  #           Statement:
+  #             - Effect: Allow
+  #               Action:
+  #                 - ecr:GetAuthorizationToken
+  #                 - ecr:BatchCheckLayerAvailability
+  #                 - ecr:GetDownloadUrlForLayer
+  #                 - ecr:BatchGetImage
+  #                 - logs:CreateLogStream
+  #                 - logs:PutLogEvents
+  #               Resource: '*'
 
 # These are the values output by the CloudFormation template. Be careful
 # about changing any of them, because of them are exported with specific
@@ -113,11 +113,11 @@ Outputs:
         - - !Ref AWS::StackName
           - ECSRole
 
-  ECSTaskExecutionRole:
-    Description: The ARN of the ECS role
-    Value: !GetAtt ECSTaskExecutionRole.Arn
-    Export:
-      Name: !Join
-        - ':'
-        - - !Ref AWS::StackName
-          - ECSTaskExecutionRole
+  # ECSTaskExecutionRole:
+  #   Description: The ARN of the ECS role
+  #   Value: !GetAtt ECSTaskExecutionRole.Arn
+  #   Export:
+  #     Name: !Join
+  #       - ':'
+  #       - - !Ref AWS::StackName
+  #         - ECSTaskExecutionRole

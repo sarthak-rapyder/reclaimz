@@ -17,17 +17,14 @@ Parameters:
   VpcID:
     Description: The VPC ID here.
     Type: String
-    Default: ""
   
   PublicSubnet1ID:
     Description: The Public Subnet ID-1 in AZ 1a here.
     Type: String
-    Default: "enabled"
     
   PublicSubnet2ID:
     Description: The Public Subnet ID-2 in AZ 1b here.
     Type: String
-    Default: "enabled"
 
 Resources:
   # A public facing load balancer, this is used for accepting traffic from the public
@@ -41,15 +38,17 @@ Resources:
       SecurityGroupIngress:
         # Allow access to ALB from anywhere on the internet
         - CidrIp: 0.0.0.0/0
-          IpProtocol: "443"
-      SecurityGroupEgress:
-        # Allow access all traffic from VPC to the internet
-        - CidrIp: 0.0.0.0/0
-          IpProtocol: "-1"
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80         
+      # SecurityGroupEgress:
+      #   # Allow access all traffic from VPC to the internet
+      #   - CidrIp: 0.0.0.0/0
+      #     IpProtocol: "-1"
 
   PublicLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    DependsOn: GatewayAttachement
+    # DependsOn: GatewayAttachement
     Properties:
       Scheme: internet-facing
       Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "alb" ] ]
@@ -74,6 +73,7 @@ Resources:
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
       Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "tg" ] ]
+      TargetType: ip
       Port: 80
       Protocol: HTTP
       UnhealthyThresholdCount: 2
@@ -86,8 +86,8 @@ Resources:
         - TargetGroupArn: !Ref TargetGroupPublic
           Type: forward
       LoadBalancerArn: !Ref PublicLoadBalancer
-      Port: 443
-      Protocol: HTTPS
+      Port: 80
+      Protocol: HTTP
 
 # These are the values output by the CloudFormation template. Be careful
 # about changing any of them, because of them are exported with specific
@@ -113,3 +113,8 @@ Outputs:
         - ':'
         - - !Ref AWS::StackName
           - PublicListener
+
+  MyPublicLoadBalancerSGId:
+    Value: !Ref PublicLoadBalancerSG
+    Export:
+      Name: PublicLoadBalancerSGId           

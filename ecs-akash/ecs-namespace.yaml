@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: This stack deploys ECS Namespace (Cloudmap Namespace).
+
+Parameters:
+  ProjectName:
+    Description: The Project name here.
+    Type: String
+    Default: "default"
+
+  Environment:
+    Description: The Environment name here.
+    Type: String
+    Default: "dev"
+  
+  NamespaceName:
+    Description: The name of the Cloud Map Namespace.
+    Type: String
+    Default: "test"
+
+  # VPCId:
+  #   Description: The VPC ID here.
+  #   Type: String
+
+Resources:
+  ECSNamespace:
+    # Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    # Properties:
+    #   Description: String
+    #   Name: !Ref NamespaceName
+    #   Vpc: !Ref VPCId
+    #   Properties: 
+    #     DnsProperties:
+    #       SOA:
+    #         TTL: 100
+    Type: AWS::ServiceDiscovery::HttpNamespace
+    Properties:
+      Name: !Ref NamespaceName
+
+          

@@ -14,6 +14,30 @@ Parameters:
     Type: String
     Default: ""
 
+  VPCId:
+    Description: The VPC ID here.
+    Type: String
+  
+  PrivateSubnet1ID:
+    Description: The Private Subnet ID-1 in AZ 1a here.
+    Type: String
+    
+  PrivateSubnet2ID:
+    Description: The Private Subnet ID-2 in AZ 1b here.
+    Type: String
+
+  PublicLoadBalancerSGId:
+    Description: The Security Group ID of PublicLoadBalancer.
+    Type: String
+
+  PublicListener:  
+    Description: The ARN of the public load balancer's Listener.
+    Type: String    
+
+  ECSCluster:
+    Description: "Name of the ECS cluster deployed"
+    Type: String
+
   ServiceName:
     Description: A name for the service
     Type: String
@@ -54,18 +78,45 @@ Parameters:
     Type: Number
     Default: 1
 
-  ServiceDnsName:
-    Description: Service connect internal DNS name
+  Namespace:
+    Description: Enter the Name of Namespace
     Type: String
     Default: ""
 
-Conditions:
-  HasCustomRole: !Not
-    - !Equals
-      - !Ref Role
-      - ""
+# Conditions:
+#   HasCustomRole: !Not
+#     - !Equals
+#       - !Ref Role
+#       - ""
 
 Resources:
+#ECStaskexecutionRole
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
   # The task definition. This is a simple metadata description of what
   # container to run, and what resource requirements it has.
   TaskDefinition:
@@ -77,15 +128,8 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn: !ImportValue
-        Fn::Join:
-          - ':'
-          - - !Ref StackName
-            - ECSTaskExecutionRole
-      TaskRoleArn: !If
-        - HasCustomRole
-        - !Ref Role
-        - !Ref AWS::NoValue
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      TaskRoleArn: !Ref ECSTaskExecutionRole
       ContainerDefinitions:
         - Name: !Ref ServiceName
           Essential: true
@@ -94,6 +138,7 @@ Resources:
           Image: !Ref ImageUrl
           PortMappings:
             - ContainerPort: !Ref ContainerPort
+              Name: !Join [ "-", [ !Ref ServiceName, "port" ] ]
   
   # ECS Service Security Group
   EcsServiceSG:
@@ -101,24 +146,18 @@ Resources:
     Properties:
       GroupDescription: Access to the public facing load balancer
       GroupName: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ecs-sg" ] ]
-      VpcId: !ImportValue
-        Fn::Join:
-          - ':'
-          - - !Ref StackName
-            - VPCId
+      VpcId: !Ref VPCId
       SecurityGroupIngress:
         # Allow access to ALB from anywhere on the internet
-        - CidrIp: !ImportValue
-        Fn::Join:
-          - ':'
-          - - !Ref StackName
-            - VPC
-            - CIDR
-          IpProtocol: !Ref ContainerPort
-      SecurityGroupEgress:
+        - SourceSecurityGroupId: !Ref PublicLoadBalancerSGId
+          #CidrIp: !Ref VPCCIDR
+          IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort         
+      # SecurityGroupEgress:
         # Allow access all traffic from VPC to the internet
-        - CidrIp: 0.0.0.0/0
-          IpProtocol: "-1"
+        # - CidrIp: 0.0.0.0/0
+        #   IpProtocol: "-1"
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -128,16 +167,13 @@ Resources:
     DependsOn: LoadBalancerRule
     Properties:
       ServiceName: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ecs-service" ] ]
-      Cluster: !ImportValue
-        Fn::Join:
-          - ':'
-          - - !Ref StackName
-            - ClusterName
+      Cluster: !Ref ECSCluster
       LaunchType: FARGATE
       ServiceConnectConfiguration:
         Enabled: true
+        Namespace: !Ref Namespace
         Services:
-          - PortName: !Ref ServiceDnsName
+          - PortName: !Join [ "-", [ !Ref ServiceName, "port" ] ]
             ClientAliases:
               - Port: !Ref ContainerPort
       DeploymentConfiguration:
@@ -148,22 +184,10 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
           SecurityGroups:
-            - !ImportValue
-              Fn::Join:
-                - ':'
-                - - !Ref StackName
-                  - FargateContainerSecurityGroup
+            - !Ref EcsServiceSG
           Subnets:
-            - !ImportValue
-              Fn::Join:
-                - ':'
-                - - !Ref StackName
-                  - PrivateSubnetOne
-            - !ImportValue
-              Fn::Join:
-                - ':'
-                - - !Ref StackName
-                  - PrivateSubnetTwo
+            - !Ref PrivateSubnet1ID
+            - !Ref PrivateSubnet2ID
       TaskDefinition: !Ref TaskDefinition
       LoadBalancers:
         - ContainerName: !Ref ServiceName
@@ -188,11 +212,7 @@ Resources:
       Port: !Ref ContainerPort
       Protocol: HTTP
       UnhealthyThresholdCount: 2
-      VpcId: !ImportValue
-        Fn::Join:
-          - ':'
-          - - !Ref StackName
-            - VPCId
+      VpcId: !Ref VPCId
 
   # Create a rule on the load balancer for routing traffic to the target group
   LoadBalancerRule:
@@ -205,29 +225,37 @@ Resources:
         - Field: path-pattern
           Values:
             - !Ref Path
-      ListenerArn: !ImportValue
-        Fn::Join:
-          - ':'
-          - - !Ref StackName
-            - PublicListener
+      ListenerArn: !Ref PublicListener
       Priority: !Ref Priority
   
   AutoScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
     Properties:
       ServiceNamespace: ecs
-      ResourceId: !Sub "service/${ECSCluster}/${ECSService.Name}"
+      # ResourceId: !Join [ "/", [ "service", !Ref ECSCluster, ${Service.Name} ] ]
+      ResourceId: !Sub "service/rczf-staging-ecs-cluster/${Service.Name}"
       ScalableDimension: ecs:service:DesiredCount
       MinCapacity: 1
       MaxCapacity: 3
-      RoleARN: `!Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
 
   WebAutoScalingPolicy:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
     Properties:
+      PolicyName: AutoScaling-Policy
       PolicyType: TargetTrackingScaling
-      ScalingTargetId: !Ref WebAutoScalingTarget
+      ScalingTargetId: !Ref AutoScalingTarget
       TargetTrackingScalingPolicyConfiguration:
         PredefinedMetricSpecification:
           PredefinedMetricType: ECSServiceAverageCPUUtilization
         TargetValue: 70
+
+Outputs:
+  ECSTaskExecutionRole:
+    Description: The ARN of the ECS role
+    Value: !GetAtt ECSTaskExecutionRole.Arn
+    Export:
+      Name: !Join
+        - ':'
+        - - !Ref AWS::StackName
+          - ECSTaskExecutionRole        
