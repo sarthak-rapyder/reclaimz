@@ -86,6 +86,7 @@ Resources:
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-role"] ]
       Path: /
       AssumeRolePolicyDocument:
         Statement:
@@ -102,8 +103,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Resource:
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${Environment}-${ApplicationName}-codebuild-project-logs
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${Environment}-${ApplicationName}-codebuild-project-logs:*
+                  - '*'
                 Action:
                   - logs:CreateLogGroup
                   - logs:Createlogstream
@@ -117,6 +117,30 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:GetBucketAcl
                   - s3:GetBucketLocation
+              - Effect: Allow
+                Resource:
+                  - arn:aws:s3:::*
+                  - arn:aws:s3:::*/*
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+              - Effect: Allow
+                Resource:
+                  - !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:report-group/*"
+                Action:
+                  - codebuild:CreateReportGroup
+                  - codebuild:CreateReport
+                  - codebuild:UpdateReport
+                  - codebuild:BatchPutTestCases
+                  - codebuild:BatchPutCodeCoverages
+              - Effect: Allow
+                Resource:
+                  - '*'
+                Action:
+                  - codeartifact:*
         - PolicyName: !Sub ${Environment}-${ApplicationName}-codebuild-vpc-policy
           PolicyDocument:
             Version: 2012-10-17
@@ -140,8 +164,8 @@ Resources:
                 Condition:
                   StringEquals:
                     ec2:Subnet:
-                      - PrivateSubnet1Arn
-                      - PrivateSubnet2Arn
+                      - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet1}
+                      - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet2}
                     ec2:AuthorizedService: codebuild.amazonaws.com
         - PolicyName: !Sub ${Environment}-${ApplicationName}-ssm-parameterstore-policy
           PolicyDocument:
@@ -161,6 +185,7 @@ Resources:
   CodePipelineServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codepipeline-role"] ]
       Path: /
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -184,7 +209,6 @@ Resources:
                   - cloudwatch:*
                   - s3:*
                   - sns:*
-                  - ':*'
                   - rds:*
                   - sqs:*
                   - ecs:*
@@ -218,7 +242,7 @@ Resources:
                 Condition:
                   StringEqualsIfExists:
                     iam:PassedToService:
-                      - .amazonaws.com
+                      - cloudformation.amazonaws.com
                       - elasticbeanstalk.amazonaws.com
                       - ec2.amazonaws.com
                       - ecs-tasks.amazonaws.com
@@ -259,6 +283,10 @@ Resources:
                   - ecr:DescribeImages
                 Resource: '*'
                 Effect: Allow
+              - Action:
+                  - codestar-connections:UseConnection
+                Resource: '*'
+                Effect: Allow
         - PolicyName: !Sub ${Environment}-${ApplicationName}-ssm-parameterstore-policy
           PolicyDocument:
             Version: 2012-10-17
@@ -288,23 +316,35 @@ Resources:
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-project" ] ]
+      Name: !Join [ "-", [ !Ref Environment, !Ref ApplicationName ] ]
       Source:
         Type: CODEPIPELINE
         GitCloneDepth: 1
-        BuildSpec: buildspec.yaml
+        BuildSpec: buildspec.yml
       Environment:
         PrivilegedMode: true
         Type: LINUX_CONTAINER
         Image: aws/codebuild/standard:7.0
         ComputeType: BUILD_GENERAL1_LARGE
-        EnvironmentVariable:
-          - Name: MY_VAR_1
+        EnvironmentVariables:
+          - Name: CODEARTIFACT_DOMAIN
             Type: PLAINTEXT
-            Value: VAR_1_VALUE
-          - Name: MY_VAR_2
+            Value: artifactory
+          - Name: CODEARTIFACT_REPOSITORY
             Type: PLAINTEXT
-            Value: VAR_2_VALUE
+            Value: release
+          - Name: SOURCE_AWS_ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: 767397957166
+          - Name: service_name
+            Type: PLAINTEXT
+            Value: !Ref ApplicationName
+          - Name: ENVIRONMENT
+            Type: PLAINTEXT
+            Value: dev
+          - Name: DEPLOY_S3BUCKETNAME
+            Type: PLAINTEXT
+            Value: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "reclaimz"] ]
       ServiceRole: !Ref CodeBuildServiceRole
       VpcConfig:
         VpcId: !Ref VpcId
@@ -315,19 +355,21 @@ Resources:
           - !Ref CodeBuildSG
       Artifacts:
         Type: CODEPIPELINE
-      logsConfig:
-        CloudWatchlogs:
-          Status: ENABLED
-          GroupName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-project-logs" ] ]
+      # LogsConfig:
+      #   CloudWatchlogs:
+      #     Status: ENABLED
+      #     # GroupName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-project-logs" ] ]
 
   CodePipelineProject:
     Type: AWS::CodePipeline::Pipeline
     DependsOn: S3BucketForCodePipeline
     Properties:
-      Name: CodePipeline
+      Name: !Join [ "-", [ !Ref Environment, !Ref ApplicationName ] ]
+      PipelineType: V2
+      ExecutionMode: QUEUED
       RoleArn: !GetAtt CodePipelineServiceRole.Arn
       Stages:
-        - Name: Source1
+        - Name: Source
           Actions:
             - Name: Source
               InputArtifacts: []
@@ -337,7 +379,7 @@ Resources:
                 Version: '1'
                 Provider: CodeStarSourceConnection
               OutputArtifacts:
-                - Name: SourceArtifact1
+                - Name: SourceArtifact
               Configuration:
                 BranchName: !Ref BranchName
                 ConnectionArn: !Ref CodestarConnectionArn
