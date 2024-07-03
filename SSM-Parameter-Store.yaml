@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Create AWS Systems Manager Parameter Store parameters
+Description: AWS CloudFormation Template to create AWS Systems Manager Parameter Store parameters
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
@@ -14,44 +14,111 @@ Metadata:
         Parameters:
           - DBUserParameterName
           - DBUser
-          - DBPwdParameterName
-          - DBPassword
-
+          - DBHostParameterName
+          - DBHostParameterValue
+          - DBPortParameterName
+          - DBPortParameterValue
+          - DBNameParameterName
+          - DBNameParameterValue
+          - RedisEndpointParameterName
+          - RedisEndpointParameterValue
+          - RedisPortParameterName
+          - RedisPortParameterValue
+          - RedisUserParameterName
+          - RedisUserParameterValue
+          
 Parameters:
   ProjectName:
-    Description: Name of the Project
+    Description: Name of the Project (ex- rczf, rczh)
     Type: String  
   Environment:
-    Description: Environment (dev, staging, prod)
+    Description: Environment (dev, staging, qa, prod)
     Type: String
   TenantType:
     Description: Tenant Type of the project (ex- finance, health)
     Type: String    
   DBUserParameterName:
-    Description: The SSM Parameter Name for DB User Parameter (ex- /prod/rcz-fin/db-user)
+    Description: Enter the SSM Parameter Name for DB User Parameter (ex- /dev/rczf-config/db-user)
     Type: String
   DBUser:
-    Description: The database admin account username (must begin with a letter and contain only alphanumeric characters (ex; postgres))
+    Description: Enter the RDS database username.
+    Type: String    
+  DBHostParameterName:
+    Description: Enter the SSM Parameter Name for DB Host Parameter (ex- /dev/rczf-config/db-host)
     Type: String
-    Default: postgres
-    MinLength: 1
-    MaxLength: 16
-    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
-    ConstraintDescription: must begin with a letter and contain only alphanumeric characters (ex; postgres).
-  DBPwdParameterName:
-    Description: The SSM Parameter Name for DB Password Parameter (ex- /prod/rcz-fin/db-pwd)
+  DBHostParameterValue:
+    Description: Enter the RDS Endpoint/URL.
+    Type: String
+  DBPortParameterName:
+    Description: Enter the SSM Parameter Name for DB Port Parameter (ex- /dev/rczf-config/db-port)
+    Type: String
+  DBPortParameterValue:
+    Description: Enter the RDS DB Port.
+    Type: String 
+  DBNameParameterName:
+    Description: Enter the SSM Parameter Name for DB Name Parameter (ex- /dev/rczf-config/db-name)
+    Type: String
+  DBNameParameterValue:
+    Description: Enter the RDS DB Name.
     Type: String  
-  DBPassword:
-    Description: The database admin account password (must contain only alphanumeric characters [a-zA-Z][a-zA-Z0-9#!$-_?]*)
+
+  RedisEndpointParameterName:
+    Description: Enter the SSM Parameter Name for Redis Endpoint Parameter (ex- /dev/rczf-config/redis-endpoint)
     Type: String
-    NoEcho: true  # Hides password input during parameter selection
-    MinLength: 1
-    MaxLength: 41
-    AllowedPattern: "[a-zA-Z][a-zA-Z0-9#!$-_?]*"
-    ConstraintDescription: must contain only alphanumeric characters.    
+  RedisEndpointParameterValue:
+    Description: Enter the Redis Endpoint/URL.
+    Type: String
+  RedisPortParameterName:
+    Description: Enter the SSM Parameter Name for Redis Port Parameter (ex- /dev/rczf-config/redis-port)
+    Type: String
+  RedisPortParameterValue:
+    Description: Enter the Redis Port.
+    Type: String 
+  RedisUserParameterName:
+    Description: Enter the SSM Parameter Name for Redis UserName Parameter (ex- /dev/rczf-config/redis-user)
+    Type: String
+  RedisUserParameterValue:
+    Description: Enter the Redis UserName.
+    Type: String    
 
 Resources:
 #SSM Parameter Store for RDS user and password
+  DBHostParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref DBHostParameterName
+      Description: "Host for the database"
+      Value: !Ref DBHostParameterValue
+      Type: String
+      Tags:
+        Name: !Ref DBHostParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName
+  DBPortParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref DBPortParameterName
+      Description: "Port for DB Port"
+      Value: !Ref DBPortParameterValue
+      Type: String
+      Tags:
+        Name: !Ref DBPortParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName
+  DBNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref DBNameParameterName
+      Description: "Username for the database"
+      Value: !Ref DBNameParameterValue
+      Type: String
+      Tags:
+        Name: !Ref DBNameParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName      
   DBUserParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -63,18 +130,44 @@ Resources:
         Name: !Ref DBUserParameterName
         Env: !Ref Environment
         TenantType: !Ref TenantType
-        Project: !Ref ProjectName
-  DBPwdParameter:
+        Project: !Ref ProjectName   
+
+  RedisEndpointParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: !Ref DBPwdParameterName
-      Description: "Password for the database"
-      Value: !Ref DBPassword
+      Name: !Ref RedisEndpointParameterName
+      Description: "Endpoint for Redis cache"
+      Value: !Ref RedisEndpointParameterValue
       Type: String
       Tags:
-        Name: !Ref DBPwdParameterName
-        Env: !Ref Environment 
+        Name: !Ref RedisEndpointParameterName
+        Env: !Ref Environment
         TenantType: !Ref TenantType
-        Project: !Ref ProjectName        
+        Project: !Ref ProjectName 
+  RedisPortParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RedisPortParameterName
+      Description: "Port for Redis cache"
+      Value: !Ref RedisPortParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RedisPortParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName 
+  RedisUserParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RedisUserParameterName
+      Description: "Username for Redis cache"
+      Value: !Ref RedisUserParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RedisUserParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName 
+    
 
-        
+       

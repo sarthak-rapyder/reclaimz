@@ -13,13 +13,14 @@ Metadata:
           default: 'S3 and CloudFront Parameters'
         Parameters:
           - s3BucketName
+#          - InvalidationLambdaARN
 
 Parameters:
   ProjectName:
-    Description: Name of the Project
+    Description: Name of the Project (ex- rczf, rczh)
     Type: String  
   Environment:
-    Description: Environment (dev, staging, prod)
+    Description: Environment (dev, staging, qa, prod)
     Type: String
   TenantType:
     Description: Tenant Type of the project (ex- finance, health)
@@ -29,6 +30,9 @@ Parameters:
     Type: String
     AllowedPattern: ^[a-z0-9.-]{3,63}$
     ConstraintDescription: 'S3 bucket names can contain only lowercase letters, numbers, dots (.), and hyphens (-)'
+  # InvalidationLambdaARN:
+  #   Description: Enter the ARN of Invalidation Lambda Function
+  #   Type: String 
 
 Resources:
   S3Bucket:
@@ -36,6 +40,16 @@ Resources:
     Properties:
       AccessControl: Private
       BucketName: !Ref s3BucketName
+      # NotificationConfiguration:
+      #   LambdaConfigurations:
+      #     - Event: 's3:ObjectCreated:*'
+      #       Filter: 
+      #         S3Key:
+      #           Rules:
+      #             - Name: prefix
+      #               Value: index.html
+      #       Function: !Ref InvalidationLambdaARN
+
       Tags:
         - Key: Name
           Value: !Ref s3BucketName
@@ -52,8 +66,9 @@ Resources:
       Bucket: !Ref s3BucketName
       PolicyDocument:
         Version: "2012-10-17"
+        Id: "PolicyForCloudFrontPrivateContent"
         Statement:
-          - Sid: AllowCloudFrontServicePrincipalReadOnly
+          - Sid: AllowCloudFrontServicePrincipal
             Effect: Allow
             Principal:
               Service: "cloudfront.amazonaws.com"
@@ -62,6 +77,14 @@ Resources:
             Condition:
               StringEquals:
                 AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
+          - Sid: AllowS3PutObject
+            Effect: Allow
+            Principal:
+              AWS:
+                - arn:aws:iam::767397957166:role/qa-healthui-codebuild-role
+                - arn:aws:iam::767397957166:role/OrganizationAccountAccessRole
+            Action: "s3:PutObject"
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref 'S3Bucket', /*]]               
 
   CloudFrontOriginAccessControl:
     Type: AWS::CloudFront::OriginAccessControl
@@ -107,6 +130,15 @@ Resources:
             Cookies:
               Forward: none
           ViewerProtocolPolicy: redirect-to-https
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ErrorCachingMinTTL: 10
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ErrorCachingMinTTL: 10
+            ResponseCode: 200
+            ResponsePagePath: /index.html          
       Tags:
         - Key: Name
           Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "cloudfront" ] ] 

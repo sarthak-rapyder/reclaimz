@@ -11,14 +11,15 @@ Parameters:
   Subnet2Id:
     Description: "The second subnet ID for the MSK cluster"
     Type: String
-  SecurityGroupId:
-    Description: "The security group ID for the MSK cluster"
-    Type: String
+  # SecurityGroupId:
+  #   Description: "The security group ID for the MSK cluster"
+  #   Type: String
   BrokerNodeInstanceType:
     Description: "The instance type for the MSK broker nodes"
     Type: String
     Default: "kafka.m5.large"
     AllowedValues:
+      - kafka.t3.small
       - kafka.m5.large
       - kafka.m5.xlarge
       - kafka.m5.2xlarge
@@ -41,6 +42,9 @@ Parameters:
   KmsKeyId:
     Description: "The KMS key ID for encryption"
     Type: String
+  SourceCidr:
+    Description: "The Source CIDR block or IP address for Redis security group"
+    Type: String      
 
 Resources:
   MSKSecurityGroup:
@@ -53,7 +57,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 9092
           ToPort: 9092
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref SourceCidr
 
   MSKCluster:
     Type: "AWS::MSK::Cluster"
@@ -72,7 +76,7 @@ Resources:
         InstanceType: 
           Ref: BrokerNodeInstanceType
         SecurityGroups:
-          - Ref: SecurityGroupId
+          - Ref: MSKSecurityGroup
       EncryptionInfo:
         EncryptionAtRest:
           DataVolumeKMSKeyId: 

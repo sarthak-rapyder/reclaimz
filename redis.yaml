@@ -1,7 +1,37 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'AWS CloudFormation template for Redis Cluster with KMS encryption'
-
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'Redis Parameters'
+        Parameters:
+          - VPCId
+          - Subnet1Id
+          - Subnet2Id
+        #  - SecurityGroupId
+          - RedisNodeType
+          - RedisClusterName
+          - RedisNumShards
+          - RedisNumReplicas
+          - KmsKeyId
+          - SourceCidr
 Parameters:
+  ProjectName:
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String  
+  Environment:
+    Description: Environment (dev, staging, qa, prod)
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String
   VpcId:
     Description: "The VPC ID for the Redis cluster"
     Type: String
@@ -11,9 +41,9 @@ Parameters:
   Subnet2Id:
     Description: "The second subnet ID for the Redis cluster"
     Type: String
-  SecurityGroupId:
-    Description: "The security group ID for the Redis cluster"
-    Type: String
+  # SecurityGroupId:
+  #   Description: "The security group ID for the Redis cluster"
+  #   Type: String
   RedisNodeType:
     Description: "The instance type for the Redis nodes"
     Type: String
@@ -33,6 +63,9 @@ Parameters:
   KmsKeyId:
     Description: "The KMS key ID for encryption"
     Type: String
+  SourceCidr:
+    Description: "The Source CIDR block or IP address for Redis security group"
+    Type: String    
 
 Resources:
   RedisSubnetGroup:
@@ -44,10 +77,18 @@ Resources:
         - Ref: Subnet2Id
       CacheSubnetGroupName: 
         !Sub "${RedisClusterName}-subnet-group"
+      Tags: 
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName        
 
   RedisSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties: 
+      GroupName: !Sub "${RedisClusterName}-sg"   
       GroupDescription: "Security group for Redis cluster"
       VpcId: 
         Ref: VpcId
@@ -55,7 +96,16 @@ Resources:
         - IpProtocol: tcp
           FromPort: 6379
           ToPort: 6379
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref SourceCidr
+      Tags:
+        - Key: Name
+          Value: !Sub "${RedisClusterName}-sg" 
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName          
 
   RedisReplicationGroup:
     Type: "AWS::ElastiCache::ReplicationGroup"
@@ -73,12 +123,19 @@ Resources:
       CacheSubnetGroupName: 
         Ref: RedisSubnetGroup
       SecurityGroupIds: 
-        - Ref: SecurityGroupId
+        - Ref: RedisSecurityGroup
       AutomaticFailoverEnabled: true
       AtRestEncryptionEnabled: true
       TransitEncryptionEnabled: true
       KmsKeyId: 
         Ref: KmsKeyId
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName        
 
 Outputs:
   RedisClusterPrimaryEndpoint:

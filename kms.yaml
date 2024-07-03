@@ -16,10 +16,10 @@ Metadata:
 
 Parameters:
   ProjectName:
-    Description: Name of the Project
+    Description: Name of the Project (ex- rczf, rczh)
     Type: String  
   Environment:
-    Description: Environment (dev, staging, prod)
+    Description: Environment (dev, staging, qa, prod)
     Type: String
   TenantType:
     Description: Tenant Type of the project (ex- finance, health)

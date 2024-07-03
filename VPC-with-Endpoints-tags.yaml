@@ -22,10 +22,10 @@ Metadata:
 
 Parameters:
   ProjectName:
-    Description: Name of the Project
+    Description: Name of the Project (ex- rczf, rczh)
     Type: String  
   Environment:
-    Description: Environment (ex- dev, staging, prod)
+    Description: Environment (ex- dev, staging, qa, prod)
     Type: String  
   TenantType:
     Description: Tenant Type of the project (ex- finance, health)
@@ -101,7 +101,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "public-subnet-1a" ] ]
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "public-subnet-2a" ] ]
         - Key: Environment
           Value: !Ref Environment
         - Key: TenantType  
@@ -119,7 +119,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "public-subnet-1b" ] ]
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "public-subnet-2b" ] ]
         - Key: Environment
           Value: !Ref Environment
         - Key: TenantType  
@@ -136,7 +136,7 @@ Resources:
       AvailabilityZone: !Select [0, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "app-subnet-1a" ] ]
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "app-subnet-2a" ] ]
         - Key: Environment
           Value: !Ref Environment
         - Key: TenantType  
@@ -153,7 +153,7 @@ Resources:
       AvailabilityZone: !Select [1, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "app-subnet-1b" ] ]
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "app-subnet-2b" ] ]
         - Key: Environment
           Value: !Ref Environment
         - Key: TenantType  
@@ -170,7 +170,7 @@ Resources:
       AvailabilityZone: !Select [0, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-subnet-1a" ] ]
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-subnet-2a" ] ]
         - Key: Environment
           Value: !Ref Environment
         - Key: TenantType  
@@ -187,7 +187,7 @@ Resources:
       AvailabilityZone: !Select [1, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-subnet-1b" ] ]
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-subnet-2b" ] ]
         - Key: Environment
           Value: !Ref Environment          
         - Key: TenantType  

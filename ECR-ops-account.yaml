@@ -1,18 +1,33 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: 'AWS CloudFormation template to create an ECR repository with KMS Encrypted, allowing Reclaimz Ops Account to push Images to this Repo'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'ECR Parameters'
+        Parameters:
+          - MyRepositoryName
+          - KMSKeyId
+          - OpsAccountID
 Parameters:
   ProjectName:
-    Description: Name of the Project
+    Description: Name of the Project (ex- rczf, rczh)
     Type: String  
+  Environment:
+    Description: Environment (ex- dev, staging, qa, prod)
+    Type: String     
   TenantType:
     Description: Tenant Type of the project (ex- finance, health)
     Type: String 
   MyRepositoryName:
     Description: Enter Name for the ECR Repository
     Type: String  
-  Environment:
-    Description: Environment (dev, staging, prod)
-    Type: String 
   KMSKeyId: 
     Description: Enter the KMS Key ID to encrypt ECR Repository
     Type: String 
@@ -63,4 +78,7 @@ Resources:
 Outputs:
   ECRRepositoryArn:
     Description: "ARN of the created ECR repository"
-    Value: !Ref MyECRRepository
+    Value: !GetAtt MyECRRepository.Arn
+  ECRRepositoryUri:
+    Description: "URI of the created ECR repository"
+    Value: !GetAtt MyECRRepository.RepositoryUri
