@@ -102,7 +102,6 @@ Parameters:
     Description: (Optional)Enter the input parameters for the Cloudformation Stack in JSON* format.
     Type: String
     MinLength: 1
-    AllowedPattern: ^[a-zA-Z0-9-_/]*$
 
   CloudFormationRole:
     Description: Enter the full ARN of the IAM role to deploy Cloudformation stack.
@@ -126,6 +125,7 @@ Resources:
   CodeBuildServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-role"] ]
       Path: /
       AssumeRolePolicyDocument:
         Statement:
@@ -142,8 +142,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Resource:
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${Environment}-${ApplicationName}-codebuild-project-logs
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${Environment}-${ApplicationName}-codebuild-project-logs:*
+                  - '*'
                 Action:
                   - logs:CreateLogGroup
                   - logs:Createlogstream
@@ -157,6 +156,30 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:GetBucketAcl
                   - s3:GetBucketLocation
+              - Effect: Allow
+                Resource:
+                  - arn:aws:s3:::*
+                  - arn:aws:s3:::*/*
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+              - Effect: Allow
+                Resource:
+                  - !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:report-group/*"
+                Action:
+                  - codebuild:CreateReportGroup
+                  - codebuild:CreateReport
+                  - codebuild:UpdateReport
+                  - codebuild:BatchPutTestCases
+                  - codebuild:BatchPutCodeCoverages
+              - Effect: Allow
+                Resource:
+                  - '*'
+                Action:
+                  - codeartifact:*
         - PolicyName: !Sub ${Environment}-${ApplicationName}-codebuild-vpc-policy
           PolicyDocument:
             Version: 2012-10-17
@@ -180,8 +203,8 @@ Resources:
                 Condition:
                   StringEquals:
                     ec2:Subnet:
-                      - PrivateSubnet1Arn
-                      - PrivateSubnet2Arn
+                      - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet1}
+                      - !Sub arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PrivateSubnet2}
                     ec2:AuthorizedService: codebuild.amazonaws.com
         - PolicyName: !Sub ${Environment}-${ApplicationName}-ssm-parameterstore-policy
           PolicyDocument:
@@ -201,6 +224,7 @@ Resources:
   CodePipelineServiceRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codepipeline-role"] ]
       Path: /
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -224,7 +248,6 @@ Resources:
                   - cloudwatch:*
                   - s3:*
                   - sns:*
-                  - ':*'
                   - rds:*
                   - sqs:*
                   - ecs:*
@@ -258,7 +281,7 @@ Resources:
                 Condition:
                   StringEqualsIfExists:
                     iam:PassedToService:
-                      - .amazonaws.com
+                      - cloudformation.amazonaws.com
                       - elasticbeanstalk.amazonaws.com
                       - ec2.amazonaws.com
                       - ecs-tasks.amazonaws.com
@@ -299,6 +322,10 @@ Resources:
                   - ecr:DescribeImages
                 Resource: '*'
                 Effect: Allow
+              - Action:
+                  - codestar-connections:UseConnection
+                Resource: '*'
+                Effect: Allow
         - PolicyName: !Sub ${Environment}-${ApplicationName}-ssm-parameterstore-policy
           PolicyDocument:
             Version: 2012-10-17
@@ -328,17 +355,17 @@ Resources:
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-project" ] ]
+      Name: !Join [ "-", [ !Ref Environment, !Ref ApplicationName ] ]
       Source:
         Type: CODEPIPELINE
         GitCloneDepth: 1
-        BuildSpec: buildspec.yaml
+        BuildSpec: buildspec.yml
       Environment:
         PrivilegedMode: true
         Type: LINUX_CONTAINER
         Image: aws/codebuild/standard:7.0
         ComputeType: BUILD_GENERAL1_SMALL
-        EnvironmentVariable:
+        EnvironmentVariables:
           - Name: MY_VAR_1
             Type: PLAINTEXT
             Value: VAR_1_VALUE
@@ -355,16 +382,18 @@ Resources:
           - !Ref CodeBuildSG
       Artifacts:
         Type: CODEPIPELINE
-      logsConfig:
-        CloudWatchlogs:
-          Status: ENABLED
-          GroupName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-project-logs" ] ]
+      # LogsConfig:
+      #   CloudWatchlogs:
+      #     Status: ENABLED
+      #     # GroupName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-project-logs" ] ]
 
   CodePipelineProject:
     Type: AWS::CodePipeline::Pipeline
     DependsOn: S3BucketForCodePipeline
     Properties:
-      Name: CodePipeline
+      Name: !Join [ "-", [ !Ref Environment, !Ref ApplicationName ] ]
+      PipelineType: V2
+      ExecutionMode: QUEUED
       RoleArn: !GetAtt CodePipelineServiceRole.Arn
       Stages:
         - Name: Source1
