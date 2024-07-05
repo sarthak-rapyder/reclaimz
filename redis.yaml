@@ -129,6 +129,8 @@ Resources:
       TransitEncryptionEnabled: true
       KmsKeyId: 
         Ref: KmsKeyId
+      UserGroupIds:
+        - redis-usr-grp        
       Tags:
         - Key: Environment
           Value: !Ref Environment

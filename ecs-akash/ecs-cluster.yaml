@@ -1,40 +1,68 @@
 AWSTemplateFormatVersion: "2010-09-09"
-
-Description: This stack deploys a ECS Fargate cluster and its IAM roles.
+Description: This stack creates a ECS Fargate cluster, Namespace and ECS IAM role.
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'ECS Cluster Parameters'
+        Parameters:
+          - ClusterName
+          - ContainerInsights
 
 Parameters:
   ProjectName:
-    Description: The Project name here.
-    Type: String
-    Default: ""
-
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String  
   Environment:
-    Description: The Environment name here.
-    Type: String
-    Default: ""
-  
+    Description: Environment (ex- dev, staging, qa, prod)
+    Type: String  
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String  
+  ClusterName:
+    Description: The ECS Cluster Name.
+    Type: String       
   ContainerInsights:
     Description: The ECS Cluster container insights.
     Type: String
     Default: "enabled"
-
-Resources:
-  # ECS Cluster
+ 
+Resources:       
+# ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ecs-cluster" ] ]
+      ClusterName: !Ref ClusterName
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT      
       ClusterSettings:
         - Name: containerInsights
           Value: !Ref ContainerInsights
+      ServiceConnectDefaults:
+        Namespace: !Ref ClusterName    
+      Tags:
+        - Key: Name
+          Value: !Ref ClusterName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName          
 
-  # This is an IAM role which authorizes ECS to manage resources on your
-  # account on your behalf, such as updating your load balancer with the
-  # details of where your containers are, so that traffic can reach your
-  # containers.
+  # This is an IAM role which authorizes ECS to manage resources on your account on your behalf, such as updating your load balancer with the
+  # details of where your containers are, so that traffic can reach your containers.
   ECSRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Join [ "-", [ !Ref ClusterName, "ECS-Role" ] ]
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
@@ -91,9 +119,6 @@ Resources:
   #                 - logs:PutLogEvents
   #               Resource: '*'
 
-# These are the values output by the CloudFormation template. Be careful
-# about changing any of them, because of them are exported with specific
-# names so that the other task related CF templates can use them.
 Outputs:
   ClusterName:
     Description: The name of the ECS cluster

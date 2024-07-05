@@ -1,0 +1,210 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template to create RDS subnet group, RDS security group, RDS instance, RDS Mater user and password in Secrets manager'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'RDS Parameters'
+        Parameters:
+          - VPCId
+          - DBSubnet1Id
+          - DBSubnet2Id
+          - DBSourceCidr
+          - DBName
+          - DBAllocatedStorage
+          - DBInstanceClass
+          - DBEngine
+          - DBEngineVersion
+          - MultiAZ
+          # - AvailabilityZone
+          - KmsKeyId
+          - DBBackupRetentionPeriod
+          - DBPreferredBackupWindow
+
+Parameters:
+  ProjectName:
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String  
+  Environment:
+    Description: Environment (dev, staging, qa, prod)
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String        
+  VPCId:
+    Description: "The VPC ID for RDS"
+    Type: String
+  DBSubnet1Id:
+    Description: "The first subnet ID for the RDS Subnet Group"
+    Type: String
+  DBSubnet2Id:
+    Description: "The second subnet ID for the RDS Subnet Group"
+    Type: String  
+  DBSourceCidr:
+    Description: "The Source CIDR block or IP address for DB security group"
+    Type: String
+  DBName:
+    Description: The database name (must begin with a letter and contain only alphanumeric characters)
+    Type: String
+    # MinLength: 1
+    # MaxLength: 64
+    # AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    # ConstraintDescription: must begin with a letter and contain only alphanumeric characters.   
+  DBAllocatedStorage:
+    Description: The size of the database (Gb) (must be between 20 and 1024Gb.)
+    Type: Number
+    Default: 20
+    MinValue: 20
+    MaxValue: 1024
+    ConstraintDescription: must be between 20 and 1024Gb.
+  DBInstanceClass:
+    Description: The database instance type (ex; db.t3.micro, db.t4g.medium)
+    Type: String
+    Default: db.t3.micro
+    ConstraintDescription: must select a valid database instance type (ex; db.t3.micro, db.t4g.medium).
+  DBEngine:
+    Description: The database engine type (ex; postgres)
+    Type: String
+    Default: postgres
+    ConstraintDescription: must select a valid database engine (ex; postgres)
+  DBEngineVersion:
+    Description: The database engine version
+    Type: String
+    ConstraintDescription: must select a valid database engine version  
+  MultiAZ:
+    Description: Enable Multi-AZ (true or false)
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+    ConstraintDescription: must be true or false.
+  # AvailabilityZone:
+  #   Description: The Availability Zone (AZ) where the database will be created
+  #   Type: String
+  #   Default: us-east-2a
+  KmsKeyId:
+    Description: "The KMS key ID for encryption"
+    Type: String  
+  DBBackupRetentionPeriod:
+    Description: The number of days for which automated backups are retained.
+    Type: Number
+    Default: 7
+    MinValue: 0
+    MaxValue: 35
+    ConstraintDescription: Must be a value from 0 to 35.
+  DBPreferredBackupWindow: 
+    Description: Must be in the format hh24:mi-hh24:mi, UTC, must not conflict with the preferred maintenance window, must be at least 30 minutes.
+    Type: String 
+    Default: 08:20-08:50
+    ConstraintDescription: Must be in the format hh24:mi-hh24:mi UTC.
+
+Resources:
+#RDS subnet Group
+  MySubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "subnet-group" ] ]
+      DBSubnetGroupDescription: RDS subnet group
+      SubnetIds:
+        - !Ref DBSubnet1Id
+        - !Ref DBSubnet2Id
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "subnet-group" ] ]
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName          
+
+  MyRDSSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "rds-secret" ] ]
+      Description: This is a Secrets Manager secret for RDS
+      KmsKeyId: !Ref KmsKeyId
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "rczmaster"}'
+        GenerateStringKey: password
+        PasswordLength: 16
+        ExcludeCharacters: "\"'@/\\"
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "rds-secret" ] ]
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName 
+
+#RDS Instance      
+  MyDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db" ] ]
+      DBName: !Ref DBName
+      MasterUsername:
+        Fn::Sub: "{{resolve:secretsmanager:${MyRDSSecret}::username}}"
+      MasterUserPassword:
+        Fn::Sub: "{{resolve:secretsmanager:${MyRDSSecret}::password}}"
+      AllocatedStorage: !Ref DBAllocatedStorage
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: !Ref DBEngine
+      EngineVersion: !Ref DBEngineVersion
+      MultiAZ: !Ref MultiAZ
+      #AvailabilityZone: !Ref AvailabilityZone
+      StorageType: gp3
+      StorageEncrypted: true
+      KmsKeyId: !Ref KmsKeyId
+      BackupRetentionPeriod: !Ref DBBackupRetentionPeriod
+      PreferredBackupWindow: !Ref DBPreferredBackupWindow
+      DBSubnetGroupName: !Ref MySubnetGroup
+      VPCSecurityGroups:
+        - !Ref MyDBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db" ] ]
+        - Key: Environment
+          Value: !Ref Environment        
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName
+          
+#RDS Security Group
+  MyDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-sg" ] ]
+      GroupDescription: Allows access to the database.
+      VpcId: !Ref VPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: !Ref DBSourceCidr
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-sg" ] ]
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName
+          
+Outputs:
+  DBEndpoint:
+    Description: "Endpoint address of the RDS database"
+    Value: !GetAtt MyDBInstance.Endpoint.Address
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "db-endpoint" ] ]

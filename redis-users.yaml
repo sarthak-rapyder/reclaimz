@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template for Redis Cluster with KMS encryption'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'Redis Parameters'
+        Parameters:
+          - RedisUserName
+          - RedisUserPassword
+          - RedisdefaultUserId
+          - RedisdefaultUserPassword
+Parameters:
+  ProjectName:
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String  
+  Environment:
+    Description: Environment (dev, staging, qa, prod)
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String  
+  RedisUserName:  
+    Description: "Enter the Redis User Name"
+    Type: String
+  RedisUserPassword:
+    Description: "Enter the Redis User Password"
+    Type: String
+    NoEcho: true   
+  RedisdefaultUserId:
+    Description: "The Redis default User, User Id(can be any name apart from default)"
+    Type: String
+    Default: dflt-user
+  RedisdefaultUserPassword:  
+    Description: "Enter the Redis default User Passowrd"
+    Type: String
+    NoEcho: true         
+
+Resources:
+# 2 redis users are created because of redis behaviour, a default user should be part of redis user group      
+  MyRedisUser1:
+    Type: AWS::ElastiCache::User
+    Properties:
+      Engine: redis
+      AccessString: on ~* +@all
+      AuthenticationMode: 
+        Passwords: 
+          - !Ref RedisUserPassword
+        Type: password
+      UserName: !Ref RedisUserName
+      UserId: !Ref RedisUserName
+      Tags:  
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName 
+  MyRedisUser2:
+    Type: AWS::ElastiCache::User
+    Properties:
+      Engine: redis
+      AccessString: on ~* +@all
+      AuthenticationMode: 
+        Passwords: 
+          - !Ref RedisdefaultUserPassword
+        Type: password
+      UserName: default
+      UserId: !Ref RedisdefaultUserId
+      Tags:  
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName               
+
+  MyUserGroup:
+    Type: AWS::ElastiCache::UserGroup
+    Properties:
+      Engine: redis
+      UserGroupId: redis-usr-grp
+      UserIds:
+        - !Ref RedisdefaultUserId
+        - !Ref RedisUserName
+      Tags:  
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName     

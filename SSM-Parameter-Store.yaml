@@ -38,44 +38,44 @@ Parameters:
     Description: Tenant Type of the project (ex- finance, health)
     Type: String    
   DBUserParameterName:
-    Description: Enter the SSM Parameter Name for DB User Parameter (ex- /dev/rczf-config/db-user)
+    Description: Enter the SSM Parameter Name for DB User Parameter (ex- /qa/rczf-config/db-user)
     Type: String
   DBUser:
     Description: Enter the RDS database username.
     Type: String    
   DBHostParameterName:
-    Description: Enter the SSM Parameter Name for DB Host Parameter (ex- /dev/rczf-config/db-host)
+    Description: Enter the SSM Parameter Name for DB Host Parameter (ex- /qa/rczf-config/db-host)
     Type: String
   DBHostParameterValue:
     Description: Enter the RDS Endpoint/URL.
     Type: String
   DBPortParameterName:
-    Description: Enter the SSM Parameter Name for DB Port Parameter (ex- /dev/rczf-config/db-port)
+    Description: Enter the SSM Parameter Name for DB Port Parameter (ex- /qa/rczf-config/db-port)
     Type: String
   DBPortParameterValue:
     Description: Enter the RDS DB Port.
     Type: String 
   DBNameParameterName:
-    Description: Enter the SSM Parameter Name for DB Name Parameter (ex- /dev/rczf-config/db-name)
+    Description: Enter the SSM Parameter Name for DB Name Parameter (ex- /qa/rczf-config/db-name)
     Type: String
   DBNameParameterValue:
     Description: Enter the RDS DB Name.
     Type: String  
 
   RedisEndpointParameterName:
-    Description: Enter the SSM Parameter Name for Redis Endpoint Parameter (ex- /dev/rczf-config/redis-endpoint)
+    Description: Enter the SSM Parameter Name for Redis Endpoint Parameter (ex- /qa/rczf-config/redis-endpoint)
     Type: String
   RedisEndpointParameterValue:
     Description: Enter the Redis Endpoint/URL.
     Type: String
   RedisPortParameterName:
-    Description: Enter the SSM Parameter Name for Redis Port Parameter (ex- /dev/rczf-config/redis-port)
+    Description: Enter the SSM Parameter Name for Redis Port Parameter (ex- /qa/rczf-config/redis-port)
     Type: String
   RedisPortParameterValue:
     Description: Enter the Redis Port.
     Type: String 
   RedisUserParameterName:
-    Description: Enter the SSM Parameter Name for Redis UserName Parameter (ex- /dev/rczf-config/redis-user)
+    Description: Enter the SSM Parameter Name for Redis UserName Parameter (ex- /qa/rczf-config/redis-user)
     Type: String
   RedisUserParameterValue:
     Description: Enter the Redis UserName.
