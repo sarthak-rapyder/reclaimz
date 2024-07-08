@@ -1,14 +1,42 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: CloudFormation template to create ECS taskexecutionRole, ECS Service, TaskDefinition.
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'ECS Parameters'
+        Parameters:
+          - VPCId
+          - PrivateSubnet1ID
+          - PrivateSubnet2ID
+          - PublicLoadBalancerSGId
+          - PublicListener 
+          - ECSCluster
+          - ServiceName
+          - ImageUrl
+          - ContainerPort
+          - ContainerCpu
+          - ContainerMemory
+          - Path
+          - Priority
+          - DesiredCount
+          - Namespace
 Parameters:
   ProjectName:
-    Description: The Project name here.
-    Type: String
-    Default: ""
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String  
   Environment:
-    Description: The Environment name here.
-    Type: String
-    Default: ""
+    Description: Environment (ex- dev, staging, qa, prod)
+    Type: String  
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String  
   VPCId:
     Description: The VPC ID here.
     Type: String 
@@ -75,6 +103,7 @@ Resources:
   ECSTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: !Join [ "-", [ !Ref ClusterName, "ECSTaskExecution-Role" ] ]    
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
@@ -233,7 +262,7 @@ Resources:
 
 Outputs:
   ECSTaskExecutionRole:
-    Description: The ARN of the ECS role
+    Description: The ARN of the ECS Task execution role
     Value: !GetAtt ECSTaskExecutionRole.Arn
     Export:
       Name: !Join

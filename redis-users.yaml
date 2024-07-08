@@ -16,6 +16,7 @@ Metadata:
           - RedisUserPassword
           - RedisdefaultUserId
           - RedisdefaultUserPassword
+          - RedisUserGroupName          
 Parameters:
   ProjectName:
     Description: Name of the Project (ex- rczf, rczh)
@@ -40,7 +41,10 @@ Parameters:
   RedisdefaultUserPassword:  
     Description: "Enter the Redis default User Passowrd"
     Type: String
-    NoEcho: true         
+    NoEcho: true   
+  RedisUserGroupName:
+    Description: "Enter the Redis User Group Name"
+    Type: String          
 
 Resources:
 # 2 redis users are created because of redis behaviour, a default user should be part of redis user group      
@@ -83,9 +87,10 @@ Resources:
 
   MyUserGroup:
     Type: AWS::ElastiCache::UserGroup
+    DependsOn: MyRedisUser2
     Properties:
       Engine: redis
-      UserGroupId: redis-usr-grp
+      UserGroupId: !Ref RedisUserGroupName
       UserIds:
         - !Ref RedisdefaultUserId
         - !Ref RedisUserName

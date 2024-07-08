@@ -21,6 +21,7 @@ Metadata:
           - RedisNumShards
           - RedisNumReplicas
           - KmsKeyId
+          - RedisUserGroupName
           - SourceCidr
 Parameters:
   ProjectName:
@@ -63,6 +64,9 @@ Parameters:
   KmsKeyId:
     Description: "The KMS key ID for encryption"
     Type: String
+  RedisUserGroupName:
+    Description: "Enter the Name/ID of Redis User Group which is already created"
+    Type: String      
   SourceCidr:
     Description: "The Source CIDR block or IP address for Redis security group"
     Type: String    
@@ -130,7 +134,7 @@ Resources:
       KmsKeyId: 
         Ref: KmsKeyId
       UserGroupIds:
-        - redis-usr-grp        
+        - !Ref RedisUserGroupName      
       Tags:
         - Key: Environment
           Value: !Ref Environment

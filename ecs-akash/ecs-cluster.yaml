@@ -92,33 +92,6 @@ Resources:
                   - elasticloadbalancing:RegisterTargets
                 Resource: '*'
 
-  # This is a role which is used by the ECS tasks themselves.
-  # ECSTaskExecutionRole:
-  #   Type: AWS::IAM::Role
-  #   Properties:
-  #     AssumeRolePolicyDocument:
-  #       Statement:
-  #         - Effect: Allow
-  #           Principal:
-  #             Service:
-  #               - ecs-tasks.amazonaws.com
-  #           Action:
-  #             - sts:AssumeRole
-  #     Path: /
-  #     Policies:
-  #       - PolicyName: AmazonECSTaskExecutionRolePolicy
-  #         PolicyDocument:
-  #           Statement:
-  #             - Effect: Allow
-  #               Action:
-  #                 - ecr:GetAuthorizationToken
-  #                 - ecr:BatchCheckLayerAvailability
-  #                 - ecr:GetDownloadUrlForLayer
-  #                 - ecr:BatchGetImage
-  #                 - logs:CreateLogStream
-  #                 - logs:PutLogEvents
-  #               Resource: '*'
-
 Outputs:
   ClusterName:
     Description: The name of the ECS cluster
@@ -138,11 +111,3 @@ Outputs:
         - - !Ref AWS::StackName
           - ECSRole
 
-  # ECSTaskExecutionRole:
-  #   Description: The ARN of the ECS role
-  #   Value: !GetAtt ECSTaskExecutionRole.Arn
-  #   Export:
-  #     Name: !Join
-  #       - ':'
-  #       - - !Ref AWS::StackName
-  #         - ECSTaskExecutionRole

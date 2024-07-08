@@ -149,4 +149,4 @@ Outputs:
   MyPublicLoadBalancerSGId:
     Value: !Ref PublicLoadBalancerSG
     Export:
-      Name: PublicLoadBalancerSGId           
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "alb-sg-Id" ] ]         
