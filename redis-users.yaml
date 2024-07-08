@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'AWS CloudFormation template for Redis Cluster with KMS encryption'
+Description: 'AWS CloudFormation template for Redis User group and Users'
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:

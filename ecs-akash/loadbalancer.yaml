@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: This stack creates an Application Loadbalancer for ECS.
+Description: This stack creates an Application Loadbalancer, Target Group for ECS.
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
