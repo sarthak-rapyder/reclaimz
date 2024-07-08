@@ -155,7 +155,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to the public facing load balancer
-      GroupName: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "ecs-sg" ] ]
+      GroupName: !Join [ "-", [ !Ref ServiceName, "sg" ] ]
       VpcId: !Ref VPCId
       SecurityGroupIngress:
         # Allow access to ALB from anywhere on the internet
@@ -163,11 +163,16 @@ Resources:
           #CidrIp: !Ref VPCCIDR
           IpProtocol: tcp
           FromPort: !Ref ContainerPort
-          ToPort: !Ref ContainerPort         
-      # SecurityGroupEgress:
-        # Allow access all traffic from VPC to the internet
-        # - CidrIp: 0.0.0.0/0
-        #   IpProtocol: "-1"
+          ToPort: !Ref ContainerPort   
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ServiceName, "sg" ] ]
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName                
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
