@@ -1,0 +1,185 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template for a production-ready Amazon MSK Cluster with KMS encryption'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'MSK Parameters'
+        Parameters:
+          - VPCId
+          - Subnet1Id
+          - Subnet2Id
+        #  - SecurityGroupId
+          - BrokerNodeInstanceType
+          - VolumeSize
+          - NumberOfBrokerNodes
+          - KafkaVersion
+          - ClusterName
+          - KmsKeyId
+          - SourceCidr
+Parameters:
+  ProjectName:
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String  
+  Environment:
+    Description: Environment (dev, staging, qa, prod)
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String
+  VpcId:
+    Description: "The VPC ID for the MSK cluster"
+    Type: String
+  Subnet1Id:
+    Description: "The first subnet ID for the MSK cluster"
+    Type: String
+  Subnet2Id:
+    Description: "The second subnet ID for the MSK cluster"
+    Type: String
+  # SecurityGroupId:
+  #   Description: "The security group ID for the MSK cluster"
+  #   Type: String
+  BrokerNodeInstanceType:
+    Description: "The instance type for the MSK broker nodes"
+    Type: String
+    Default: "kafka.t3.small"
+    AllowedValues:
+      - kafka.t3.small
+      - kafka.m5.large
+      - kafka.m5.xlarge
+      - kafka.m5.2xlarge
+      - kafka.m5.4xlarge
+      - kafka.m5.12xlarge
+  VolumeSize:
+    Description: "The EBS storage volume per broker"
+    Type: Number 
+    Default: 50 
+  NumberOfBrokerNodes:
+    Description: "The number of broker nodes in the MSK cluster"
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 15
+  KafkaVersion:
+    Description: "The version of Apache Kafka"
+    Type: String
+    Default: "3.5.1"
+  ClusterName:
+    Description: "The name of the MSK cluster"
+    Type: String
+    Default: "msk-cluster"
+  KmsKeyId:
+    Description: "The KMS key ID for encryption"
+    Type: String
+  SourceCidr:
+    Description: "The Source CIDR block or IP address for Redis security group"
+    Type: String      
+
+Resources:
+  MSKCloudWatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupClass: STANDARD
+      LogGroupName: !Sub "/aws/msk/${ClusterName}/broker-logs"
+      RetentionInDays: 30
+      Tags:
+        - Key: Name
+          Value: !Sub "/aws/msk/${ClusterName}/broker-logs"
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName 
+
+  MSKSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties: 
+      GroupName: !Sub "${ClusterName}-sg" 
+      GroupDescription: "Security group for MSK cluster"
+      VpcId: 
+        Ref: VpcId
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 9092
+          ToPort: 9092
+          CidrIp: !Ref SourceCidr
+      Tags:
+        - Key: Name
+          Value: !Sub "${ClusterName}-sg" 
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName           
+
+  MSKCluster:
+    Type: "AWS::MSK::Cluster"
+    Properties:
+      ClusterName: 
+        Ref: ClusterName
+      KafkaVersion: 
+        Ref: KafkaVersion
+      NumberOfBrokerNodes: 
+        Ref: NumberOfBrokerNodes
+      BrokerNodeGroupInfo:
+        BrokerAZDistribution: DEFAULT
+        ClientSubnets:
+          - Ref: Subnet1Id
+          - Ref: Subnet2Id
+        InstanceType: 
+          Ref: BrokerNodeInstanceType
+        StorageInfo: 
+          EBSStorageInfo: 
+            VolumeSize: !Ref VolumeSize      
+        SecurityGroups:
+          - Ref: MSKSecurityGroup
+      ClientAuthentication:
+        Sasl:
+          Iam:
+            Enabled: true    
+      EncryptionInfo:
+        EncryptionAtRest:
+          DataVolumeKMSKeyId: 
+            Ref: KmsKeyId
+        EncryptionInTransit:
+          ClientBroker: TLS
+          InCluster: true
+      LoggingInfo:
+        BrokerLogs:
+          CloudWatchLogs:
+            Enabled: true
+            LogGroup: 
+              !Sub "/aws/msk/${ClusterName}/broker-logs"
+      Tags:
+        Name: !Ref ClusterName
+        Environment: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName               
+
+# Outputs:
+#   MSKClusterArn:
+#     Description: "ARN of the MSK cluster"
+#     Value: 
+#       !Ref MSKCluster
+
+  # MSKBootstrapBrokers:
+  #   Description: "Bootstrap brokers for connecting to the MSK cluster"
+  #   Value: 
+  #     !GetAtt 
+  #       - MSKCluster
+  #       - BootstrapBrokers
+
+  # MSKBootstrapBrokersTls:
+  #   Description: "TLS bootstrap brokers for connecting to the MSK cluster"
+  #   Value: 
+  #     !GetAtt 
+  #       - MSKCluster
+  #       - BootstrapBrokersTls

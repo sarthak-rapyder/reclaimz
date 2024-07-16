@@ -1,0 +1,623 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS CloudFormation Template to create AWS Systems Manager Parameter Store parameters for Finance Tenant
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'SSM Parameters'
+        Parameters:
+          - RczfTokenIssuerUriParameterName
+          - RczfTokenIssuerUriParameterValue
+          - RczfUiUrlParameterName
+          - RczfUiUrlParameterValue
+          - RczfConfigDBUrlParameterName
+          - RczfConfigDBUrlParameterValue
+          - RczfConfigDBUserParameterName
+          - RczfConfigDBUserParameterValue
+          - RczfConfigDBPwdParameterName
+          - RczfConfigDBPwdParameterValue
+          - RczfConfigDBPyUrlParameterName
+          - RczfConfigDBPyUrlParameterValue
+          - RczfConfigSvcUrlParameterName
+          - RczfConfigSvcUrlParameterValue
+          - RczfGatewayDBUrlParameterName
+          - RczfGatewayDBUrlParameterValue
+          - RczfGatewayDBUserParameterName
+          - RczfGatewayDBUserParameterValue
+          - RczfGatewayDBPwdParameterName
+          - RczfGatewayDBPwdParameterValue
+          - RczfTrademgrDBUrlParameterName
+          - RczfTrademgrDBUrlParameterValue
+          - RczfTrademgrDBUserParameterName
+          - RczfTrademgrDBUserParameterValue
+          - RczfTrademgrDBPwdParameterName
+          - RczfTrademgrDBPwdParameterValue
+          - RczfKafkaBootstrapServersParameterName
+          - RczfKafkaBootstrapServersParameterValue
+          - RczfTrademgrKafkaConsumerGroupParameterName
+          - RczfTrademgrKafkaConsumerGroupParameterValue
+          - RczfTrademgrKafkaProducerClientParameterName
+          - RczfTrademgrKafkaProducerClientParameterValue
+          - RczfKafkaTradeTopicParameterName
+          - RczfKafkaTradeTopicParameterValue
+          - RczfKafkaClaimsTopicParameterName
+          - RczfKafkaClaimsTopicParameterValue
+          - RczfRedisHostParameterName
+          - RczfRedisHostParameterValue
+          - RczfRedisPortParameterName
+          - RczfRedisPortParameterValue
+          - RczfRedisUserParameterName
+          - RczfRedisUserParameterValue
+          - RczfRedisPwdParameterName
+          - RczfRedisPwdParameterValue
+          - RczfMailSenderParameterName
+          - RczfMailSenderParameterValue
+          - RczfAwsRegionParameterName
+          - RczfAwsRegionParameterValue
+          - RczfTradeConfirmBucketParameterName
+          - RczfTradeConfirmBucketParameterValue
+          - RczfTradeConfirmPathParameterName
+          - RczfTradeConfirmPathParameterValue
+          - RczfEventsQueueParameterName
+          - RczfEventsQueueParameterValue
+          
+Parameters:
+  ProjectName:
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String 
+    Default: rczf 
+  Environment:
+    Description: Environment (dev, staging, qa, prod)
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String 
+    Default: finance
+  RczfTokenIssuerUriParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-token-issuer-uri
+  RczfTokenIssuerUriParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --
+  RczfUiUrlParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-ui-url  
+  RczfUiUrlParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --         
+  RczfConfigDBUrlParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-config-db-url 
+  RczfConfigDBUrlParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String 
+    Default: --      
+  RczfConfigDBUserParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-config-db-user 
+  RczfConfigDBUserParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String 
+    Default: --    
+  RczfConfigDBPwdParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-config-db-pwd 
+  RczfConfigDBPwdParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfConfigDBPyUrlParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-config-db-py-url 
+  RczfConfigDBPyUrlParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfConfigSvcUrlParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-config-svc-url 
+  RczfConfigSvcUrlParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfGatewayDBUrlParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-gateway-db-url 
+  RczfGatewayDBUrlParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfGatewayDBUserParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-gateway-db-user 
+  RczfGatewayDBUserParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfGatewayDBPwdParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-gateway-db-pwd 
+  RczfGatewayDBPwdParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --     
+  RczfTrademgrDBUrlParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-trademgr-db-url 
+  RczfTrademgrDBUrlParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String 
+    Default: --       
+  RczfTrademgrDBUserParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-trademgr-db-user 
+  RczfTrademgrDBUserParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfTrademgrDBPwdParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-trademgr-db-pwd 
+  RczfTrademgrDBPwdParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfKafkaBootstrapServersParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-kafka-bootstrap-servers 
+  RczfKafkaBootstrapServersParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfTrademgrKafkaConsumerGroupParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-trademgr-kafka-consumer-group 
+  RczfTrademgrKafkaConsumerGroupParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfTrademgrKafkaProducerClientParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-trademgr-kafka-producer-client 
+  RczfTrademgrKafkaProducerClientParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfKafkaTradeTopicParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-kafka-trade-topic 
+  RczfKafkaTradeTopicParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String 
+    Default: --       
+  RczfKafkaClaimsTopicParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-kafka-claims-topic 
+  RczfKafkaClaimsTopicParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfRedisHostParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-redis-host 
+  RczfRedisHostParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfRedisPortParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-redis-port 
+  RczfRedisPortParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfRedisUserParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-redis-user 
+  RczfRedisUserParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfRedisPwdParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-redis-pwd 
+  RczfRedisPwdParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfMailSenderParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-mail-sender 
+  RczfMailSenderParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfAwsRegionParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-aws-region 
+  RczfAwsRegionParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfTradeConfirmBucketParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-trade-confirm-bucket 
+  RczfTradeConfirmBucketParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+  RczfTradeConfirmPathParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-trade-confirm-path 
+  RczfTradeConfirmPathParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String
+    Default: --        
+  RczfEventsQueueParameterName:
+    Description: Enter the SSM Parameter Name.
+    Type: String
+    Default: /qa/rczf-events-queue 
+  RczfEventsQueueParameterValue:
+    Description: Enter the SSM Parameter Value.
+    Type: String  
+    Default: --      
+
+Resources:
+  RczfTokenIssuerUri:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfTokenIssuerUriParameterName
+      Description: "token issuer uri"
+      Value: !Ref RczfTokenIssuerUriParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfTokenIssuerUriParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfUiUrl:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfUiUrlParameterName
+      Description: "UI URL"
+      Value: !Ref RczfUiUrlParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfUiUrlParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfConfigDBUrl:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfConfigDBUrlParameterName
+      Description: "config db url"
+      Value: !Ref RczfConfigDBUrlParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfConfigDBUrlParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfConfigDBUser:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfConfigDBUserParameterName
+      Description: "config db user"
+      Value: !Ref RczfConfigDBUserParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfConfigDBUserParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfConfigDBPwd:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfConfigDBPwdParameterName
+      Description: "config db password"
+      Value: !Ref RczfConfigDBPwdParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfConfigDBPwdParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfConfigDBPyUrl:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfConfigDBPyUrlParameterName
+      Description: "config db py url"
+      Value: !Ref RczfConfigDBPyUrlParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfConfigDBPyUrlParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfConfigSvcUrl:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfConfigSvcUrlParameterName
+      Description: "config svc url"
+      Value: !Ref RczfConfigSvcUrlParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfConfigSvcUrlParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfGatewayDBUrl:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfGatewayDBUrlParameterName
+      Description: "gateway db url"
+      Value: !Ref RczfGatewayDBUrlParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfGatewayDBUrlParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfGatewayDBUser:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfGatewayDBUserParameterName
+      Description: "gateway db user"
+      Value: !Ref RczfGatewayDBUserParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfGatewayDBUserParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfGatewayDBPwd:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfGatewayDBPwdParameterName 
+      Description: "gateway db password"
+      Value: !Ref RczfGatewayDBPwdParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfGatewayDBPwdParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfTrademgrDBUrl:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfTrademgrDBUrlParameterName
+      Description: "trademgr db url"
+      Value: !Ref RczfTrademgrDBUrlParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfTrademgrDBUrlParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfTrademgrDBUser:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfTrademgrDBUserParameterName
+      Description: "trademgr db user"
+      Value: !Ref RczfTrademgrDBUserParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfTrademgrDBUserParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfTrademgrDBPwd:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfTrademgrDBPwdParameterName
+      Description: "trademgr db password"
+      Value: !Ref RczfTrademgrDBPwdParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfTrademgrDBPwdParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfKafkaBootstrapServers:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfKafkaBootstrapServersParameterName
+      Description: "kafka bootstrap servers url"
+      Value: !Ref RczfKafkaBootstrapServersParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfKafkaBootstrapServersParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfTrademgrKafkaConsumerGroup:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfTrademgrKafkaConsumerGroupParameterName
+      Description: "trademgr kafka consumer group"
+      Value: !Ref RczfTrademgrKafkaConsumerGroupParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfTrademgrKafkaConsumerGroupParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfTrademgrKafkaProducerClient:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfTrademgrKafkaProducerClientParameterName
+      Description: "trademgr kafka producer client"
+      Value: !Ref RczfTrademgrKafkaProducerClientParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfTrademgrKafkaProducerClientParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfKafkaTradeTopic:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfKafkaTradeTopicParameterName
+      Description: "kafka trade topic"
+      Value: !Ref RczfKafkaTradeTopicParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfKafkaTradeTopicParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfKafkaClaimsTopic:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfKafkaClaimsTopicParameterName
+      Description: "kafka claims topic"
+      Value: !Ref RczfKafkaClaimsTopicParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfKafkaClaimsTopicParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfRedisHost:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfRedisHostParameterName
+      Description: "redis host"
+      Value: !Ref RczfRedisHostParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfRedisHostParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfRedisPort:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfRedisPortParameterName
+      Description: "redis port"
+      Value: !Ref RczfRedisPortParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfRedisPortParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfRedisUser:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfRedisUserParameterName
+      Description: "redis user"
+      Value: !Ref RczfRedisUserParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfRedisUserParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfRedisPwd:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfRedisPwdParameterName
+      Description: "redis password"
+      Value: !Ref RczfRedisPwdParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfRedisPwdParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfMailSender:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfMailSenderParameterName
+      Description: "mail sender"
+      Value: !Ref RczfMailSenderParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfMailSenderParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfAwsRegion:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfAwsRegionParameterName
+      Description: "aws region"
+      Value: !Ref RczfAwsRegionParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfAwsRegionParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfTradeConfirmBucket:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfTradeConfirmBucketParameterName
+      Description: "trade confirm s3 bucket"
+      Value: !Ref RczfTradeConfirmBucketParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfTradeConfirmBucketParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfTradeConfirmPath:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfTradeConfirmPathParameterName
+      Description: "trade confirm path"
+      Value: !Ref RczfTradeConfirmPathParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfTradeConfirmPathParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName  
+  RczfEventsQueue:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Ref RczfEventsQueueParameterName
+      Description: "events queue"
+      Value: !Ref RczfEventsQueueParameterValue
+      Type: String
+      Tags:
+        Name: !Ref RczfEventsQueueParameterName
+        Env: !Ref Environment
+        TenantType: !Ref TenantType
+        Project: !Ref ProjectName

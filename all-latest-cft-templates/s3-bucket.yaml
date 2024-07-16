@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template to create S3 Bucket'
+Parameters:
+  S3BucketName:
+    Description: Name of the S3 Bucket
+    Type: String
+    AllowedPattern: ^[a-z0-9.-]{3,63}$
+    ConstraintDescription: 'S3 bucket names can contain only lowercase letters, numbers, dots (.), and hyphens (-)'
+  Environment:
+    Description: Name of the environment to deploy the stack (ex - qa, dev, test, prod)
+    Type: String
+    AllowedPattern: ^[a-z][a-z0-9-]*$
+    ConstraintDescription: 'must begin with a lowercase letter, and can only contain lowercase letters, numbers, and hyphens.'  
+
+Resources:
+  MyS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref S3BucketName
+      Tags:
+      - Key: Name
+        Value: !Ref S3BucketName    
+      - Key: Environment
+        Value: !Ref Environment 
+    

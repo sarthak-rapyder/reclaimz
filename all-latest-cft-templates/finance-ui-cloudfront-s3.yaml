@@ -1,0 +1,173 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation template to create S3 bucket and CloudFront Distribution(ohio us-east-2 region only).
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'S3 and CloudFront Parameters'
+        Parameters:
+          - s3BucketName
+          - AlternateDomainName1
+          - AlternateDomainName2
+          - ACMCertificateARN
+#          - InvalidationLambdaARN
+
+Parameters:
+  ProjectName:
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String  
+  Environment:
+    Description: Environment (dev, staging, qa, prod)
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String       
+  s3BucketName:
+    Description: Name of the S3 Bucket
+    Type: String
+    AllowedPattern: ^[a-z0-9.-]{3,63}$
+    ConstraintDescription: 'S3 bucket names can contain only lowercase letters, numbers, dots (.), and hyphens (-)'
+  AlternateDomainName1:
+    Description: Enter the Alternate Domain Name 1 for your Cloudfront Distribution
+    Type: String
+  AlternateDomainName2:
+    Description: Enter the Alternate Domain Name 2 for your Cloudfront Distribution
+    Type: String    
+  ACMCertificateARN:
+    Description: Enter the ACM Certificate ARN for your Cloudfront Distribution
+    Type: String         
+  # InvalidationLambdaARN:
+  #   Description: Enter the ARN of Invalidation Lambda Function
+  #   Type: String 
+
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Ref s3BucketName
+      # NotificationConfiguration:
+      #   LambdaConfigurations:
+      #     - Event: 's3:ObjectCreated:*'
+      #       Filter: 
+      #         S3Key:
+      #           Rules:
+      #             - Name: prefix
+      #               Value: index.html
+      #       Function: !Ref InvalidationLambdaARN
+
+      Tags:
+        - Key: Name
+          Value: !Ref s3BucketName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName         
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref s3BucketName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Id: "PolicyForCloudFrontPrivateContent"
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: "cloudfront.amazonaws.com"
+            Action: "s3:GetObject"
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref 'S3Bucket', /*]]
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
+          - Sid: AllowS3PutObject
+            Effect: Allow
+            Principal:
+              AWS:
+                - arn:aws:iam::767397957166:role/qa-financeui-codebuild-role
+                - arn:aws:iam::767397957166:role/OrganizationAccountAccessRole
+            Action: "s3:PutObject"
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref 'S3Bucket', /*]]               
+
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Description: "origin access control(OAC) for allowing cloudfront to access S3 bucket"
+        Name: !Ref S3Bucket
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    DependsOn:
+      - S3Bucket
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !Join ['', [!Ref 'S3Bucket', '.s3.us-east-2.amazonaws.com']]
+            Id: !Ref S3Bucket
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
+        Enabled: "true"
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        Aliases: 
+          - !Ref AlternateDomainName1
+          - !Ref AlternateDomainName2
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+          Compress: true
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf
+          ResponseHeadersPolicyId: eaab4381-ed33-4a86-88ca-d9558dc6cd63
+          TargetOriginId: !Ref S3Bucket
+          ForwardedValues:
+            QueryString: "false"
+            Cookies:
+              Forward: none
+          ViewerProtocolPolicy: redirect-to-https
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ErrorCachingMinTTL: 10
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ErrorCachingMinTTL: 10
+            ResponseCode: 200
+            ResponsePagePath: /index.html   
+        ViewerCertificate:
+          AcmCertificateArn: !Ref ACMCertificateARN
+          MinimumProtocolVersion: TLSv1.2_2021
+          SslSupportMethod: sni-only       
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "cloudfront" ] ] 
+        - Key: Environment
+          Value: !Ref Environment  
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName 
+          
+Outputs:
+  DistributionDomainName:
+    Value: !GetAtt CloudFrontDistribution.DomainName          

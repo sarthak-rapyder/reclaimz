@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Creates a Lambda function and IAM role.
+Parameters: 
+  Environment:
+    Description: Environment (ex- dev, staging, qa, prod)
+    Type: String  
+  # FinanceuiBucketName:
+  #   Description: Name of the Financeui S3 Bucket
+  #   Type: String   
+  # FinanceuiCDNDistributionId:
+  #   Description: Name of the Financeui CloudFront Distribution Id
+  #   Type: String   
+  # HealthuiBucketName:
+  #   Description: Name of the Healthui S3 Bucket
+  #   Type: String    
+  # HealthuiCDNDistributionId:
+  #   Description: Name of the Healthui CloudFront Distribution Id
+  #   Type: String   
+
+Resources:
+  CloudfrontInvalidationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: Cloudfront-Invalidation-Role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole   
+      Policies:
+        - PolicyName: CloudfrontInvalidationPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudfront:CreateInvalidation
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents                  
+                Resource: "*"
+        # - PolicyName: AWSLambdaBasicExecutionPolicy
+        #   PolicyDocument:
+        #     Version: 2012-10-17
+        #     Statement:
+        #       - Effect: Allow
+        #         Action:
+        #           - logs:CreateLogGroup
+        #         Resource: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+        #       - Effect: Allow
+        #         Action:
+        #           - logs:CreateLogStream
+        #           - logs:PutLogEvents
+        #         Resource:
+        #           - "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cloudfront-invalidation:*"
+      Tags:
+        - Key: Name
+          Value: Cloudfront-Invalidation-Role
+        - Key: Environment
+          Value: !Ref Environment
+
+  CloudFrontInvalidationLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: cloudfront-invalidation
+      Code:
+        S3Bucket: lambda-code-qa-account
+        S3Key: cloudfront-invalidation/lambda_function.zip
+      Description: lambda function to Invalidate CloudFront Cache
+      MemorySize: 128
+      Timeout: 300
+      Tags:
+        - Key: Name
+          Value: cloudfront-invalidation
+        - Key: Environment
+          Value: !Ref Environment
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      EphemeralStorage:
+        Size: 512
+      # Environment:
+      #   Variables:
+      #     financeui_bucket_name: !Ref FinanceuiBucketName
+      #     financeui_cdn_distributionid: !Ref FinanceuiCDNDistributionId
+      #     healthui_bucket_name: !Ref HealthuiBucketName
+      #     healthui_cdn_distributionid: !Ref HealthuiCDNDistributionId
+      Role: !GetAtt CloudfrontInvalidationRole.Arn
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/cloudfront-invalidation
+      RetentionInDays: 30
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment          

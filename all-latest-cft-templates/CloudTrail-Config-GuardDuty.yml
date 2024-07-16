@@ -1,0 +1,1431 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template to create CloudTrail, Config, GuardDuty, BudgetAlarms, IAM Password Policy, Best practices Alarms'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'CloudTrail Parameters'
+        Parameters:
+          - CustomerName
+          - S3DataEvents
+      - Label:
+          default: 'Do you want to enable GuardDuty?'
+        Parameters:
+          - EnableGuardDuty
+      - Label:
+          default: 'Do you want to enable Config?'
+        Parameters:
+          - EnableConfig
+          - ConfigRoleExists
+      - Label:
+          default: 'Enable Rules/Notifications'
+        Parameters:
+          - EnableCloudtrailRules
+          - EnableGuardDutyEvent
+          - EnableConfigRules
+      - Label:
+          default: 'SNS Email Subscription'
+        Parameters:
+          - SubscribeTo
+      - Label:
+          default: 'Select following required features to be enabled.'
+        Parameters:
+          - EnableIAMPasswordPolicy
+          - EnableBudgetAlarm
+          - BudgetAlarmLimitAmount
+
+Parameters:
+  CustomerName:
+    Description: 'Name of the Customer. Constraint: Name should be in lowercase'
+    Type: String
+    AllowedPattern: '^[0-9a-z]+([0-9a-z-]*[0-9a-z])*$'
+    ConstraintDescription: 3-60 characters; must contain only lowercase letters or numbers or -
+    MinLength: 3
+    MaxLength: 60
+  S3DataEvents:
+    Description: 'Record data events of all S3 buckets? (Warning: additional charges apply.)'
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  EnableGuardDuty:
+    Description: 'Limitation: Stack will fail if guardduty is already enabled. Select False if guardduty is already enbaled.'
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  EnableConfig:
+    Description: 'Limitation: Stack will fail if config recorder is already enabled. Select False if config is already enbaled. (https://console.aws.amazon.com/config)'
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  ConfigRoleExists:
+    Description: 'If IAM role with name AWSServiceRoleForConfig already exists, select True, else Stack will fail'
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  EnableCloudtrailRules:
+    Description: 'Do you want to enable Cloudtrail Event Notifications?'
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  EnableGuardDutyEvent:
+    Description: 'Do you want to enable GuardDuty Notifications?'
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  EnableConfigRules:
+    Description: 'Do you want to enable Config Rules?'
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  SubscribeTo:
+    Description: 'Enter an email address that you want to subscribe for notifications.'
+    Type: String
+  EnableIAMPasswordPolicy:
+    Description: 'Do you want to enable IAM Password Policy?'
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  EnableBudgetAlarm:
+    Description: 'Do you want to enable AWS Budget Alarm'
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  BudgetAlarmLimitAmount:
+    Description: 'Enter Amount for Monthly Budget Alarm. Select only if you have chosen true for EnableBudgetAlarm'
+    Type: String
+    Default: '0'
+
+Conditions:
+  IsS3DataEvents: !Equals [!Ref 'S3DataEvents', 'true']
+  IsGuardDutyEnabled: !Equals [!Ref 'EnableGuardDuty', 'true']
+  IsConfigEnabled: !Equals [!Ref 'EnableConfig', 'true']
+  IsIAMPasswordPolicyEnabled: !Equals [!Ref 'EnableIAMPasswordPolicy', 'true']
+  IsBudgetAlarmEnabled: !Equals [!Ref 'EnableBudgetAlarm', 'true']
+  ShallCloudtrailRulesEnabled: !Equals [!Ref 'EnableCloudtrailRules', 'true']
+  ShallGuardDutyRulesEnabled: !Equals [!Ref 'EnableGuardDutyEvent', 'true']
+  ShallConfigRulesEnabled: !Equals [!Ref 'EnableConfigRules', 'true']
+  ConfigRoleToBeCreated: !Equals [!Ref 'ConfigRoleExists', 'false']
+
+Resources:
+  cloudtrailKey:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::KMS::Key
+    Properties:
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: key-cloudtrail
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Join
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow CloudTrail to encrypt logs
+            Effect: Allow
+            Principal:
+              Service:
+                - cloudtrail.amazonaws.com
+            Action: 'kms:GenerateDataKey*'
+            Resource: '*'
+            Condition:
+              StringLike:
+                'kms:EncryptionContext:aws:cloudtrail:arn': !Sub 'arn:aws:cloudtrail:*:${AWS::AccountId}:trail/*'
+          - Sid: Allow CloudTrail to describe key
+            Effect: Allow
+            Principal:
+              Service:
+                - cloudtrail.amazonaws.com
+            Action: 'kms:DescribeKey'
+            Resource: '*'
+          - Sid: Allow principals in the account to decrypt log files
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:ReEncryptFrom'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'kms:CallerAccount': !Sub '${AWS::AccountId}'
+              StringLike:
+                'kms:EncryptionContext:aws:cloudtrail:arn': !Sub 'arn:aws:cloudtrail:*:${AWS::AccountId}:trail/*'
+          - Sid: Allow alias creation during setup
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: 'kms:CreateAlias'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'kms:ViaService': ec2.region.amazonaws.com
+                'kms:CallerAccount': !Sub '${AWS::AccountId}'
+          - Sid: Enable cross account log decryption
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:ReEncryptFrom'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'kms:CallerAccount': !Sub '${AWS::AccountId}'
+              StringLike:
+                'kms:EncryptionContext:aws:cloudtrail:arn': !Sub 'arn:aws:cloudtrail:*:${AWS::AccountId}:trail/*'
+
+  # GUARD DUTY
+  EnableGuardDutyRes:
+    Condition: IsGuardDutyEnabled
+    Type: AWS::GuardDuty::Detector
+    Properties:
+      Enable: true
+      Features:
+          - Name : EBS_MALWARE_PROTECTION 
+            Status : DISABLED
+          - Name : EKS_AUDIT_LOGS 
+            Status : DISABLED
+          - Name : EKS_RUNTIME_MONITORING 
+            Status : DISABLED
+          - Name : LAMBDA_NETWORK_LOGS 
+            Status : DISABLED
+          - Name : RDS_LOGIN_EVENTS 
+            Status : DISABLED
+          - Name : S3_DATA_EVENTS 
+            Status : DISABLED
+
+  # GUARD DUTY
+  GuardDutyRule1:
+    Condition: ShallGuardDutyRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        {
+          "source": [
+              "aws.guardduty"
+          ],
+          "detail-type": [
+              "GuardDuty Finding"
+          ],
+          "detail": {
+            "severity": [{ "numeric": [ ">=", 4 ] }]
+          }
+        }
+      Name: GuardDuty-Findings
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              findingType: $.detail.type
+              region: $.region
+              time: $.time
+            InputTemplate: !Sub |-
+              "GuardDuty Finding is detected"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Time (UTC): <time>"
+              "Region: <region>"
+              "Finding Type: <findingType>"
+
+  # HEALTH
+  HealthEventRule1:
+    Condition: ShallGuardDutyRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        source:
+          - aws.health
+      Name: AllHealthEventRule
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              detailType: $.detail-type
+              eventType: $.detail.eventTypeCode
+              region: $.region
+              time: $.time
+            InputTemplate: !Sub  |-
+              "<detailType> Detected"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Event Type: <eventType>"
+              "Time (UTC): <time>"
+              "Region: <region>"
+
+              "Kindly go to AWS Health Dashboard and check for the event"
+
+  # ____________________________________________________________________________________________________________________________________________________________________________________
+  # CONFIG
+  EnableConfigRes:
+    Condition: IsConfigEnabled
+    Type: AWS::Config::ConfigurationRecorder
+    Properties:
+      RecordingGroup:
+        AllSupported: true
+        IncludeGlobalResourceTypes: true
+      RoleARN: !Sub 'arn:aws:iam::${AWS::AccountId}:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig'
+
+  ConfigRole:
+    Condition: ConfigRoleToBeCreated
+    Type: AWS::IAM::ServiceLinkedRole
+    Properties: 
+      AWSServiceName: config.amazonaws.com
+
+  DeliveryChannel:
+    Condition: IsConfigEnabled
+    Type: AWS::Config::DeliveryChannel
+    Properties:
+      S3BucketName:
+        Ref: ConfigBucket
+
+  ConfigBucket:
+    Condition: IsConfigEnabled
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${CustomerName}-config-${AWS::AccountId}-logs'
+      LifecycleConfiguration: 
+        Rules:
+          - Id: !Sub "${CustomerName}-config-lifecycle-rule"
+            ExpirationInDays: 180
+            Status: Enabled
+
+  ConfigBucketPolicy:
+    Condition: IsConfigEnabled
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref ConfigBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSConfigAclCheck
+            Effect: Allow
+            Principal:
+              Service: 'config.amazonaws.com'
+            Action: 's3:GetBucketAcl'
+            Resource: !Sub 'arn:aws:s3:::${ConfigBucket}'
+          - Sid: AWSCconfigWrite
+            Effect: Allow
+            Principal:
+              Service: 'config.amazonaws.com'
+            Action: 's3:PutObject'
+            Resource: !Sub 'arn:aws:s3:::${ConfigBucket}/AWSLogs/${AWS::AccountId}/*'
+            Condition:
+              StringEquals:
+                's3:x-amz-acl': 'bucket-owner-full-control'
+          - Sid: AllowSSLRequestsOnly
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt 'ConfigBucket.Arn'
+              - !Sub '${ConfigBucket.Arn}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': false
+
+  # CONFIG RULES
+  CheckForEbsOptimizedInstance:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: CheckForEbsOptimizedInstance
+      Description: Disallow launch of EC2 instance types that are not EBS-optimized - Checks whether EBS optimization is enabled for your EC2 instances that can be EBS-optimized
+      Source:
+        Owner: AWS
+        SourceIdentifier: EBS_OPTIMIZED_INSTANCE
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::EC2::Instance
+
+  CheckForEc2VolumesInUse:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForEc2VolumesInUse
+      Description: Disallow EBS volumes that are unattached to an EC2 instance - Checks whether EBS volumes are attached to EC2 instances
+      InputParameters:
+        deleteOnTermination: true
+      Source:
+        Owner: AWS
+        SourceIdentifier: EC2_VOLUME_INUSE_CHECK
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::EC2::Volume
+
+  CheckForEncryptedVolumes:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForEncryptedVolumes
+      Description: Enable encryption for EBS volumes attached to EC2 instances - Checks whether EBS volumes that are in an attached state are encrypted.
+      Source:
+        Owner: AWS
+        SourceIdentifier: ENCRYPTED_VOLUMES
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::EC2::Volume
+
+  CheckForIAMUserMFA:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForIAMUserMFA
+      Description: Disallow access to IAM users without MFA - Checks whether the AWS Identity and Access Management users have multi-factor authentication (MFA) enabled. The rule is COMPLIANT if MFA is enabled.
+      Source:
+        Owner: AWS
+        SourceIdentifier: IAM_USER_MFA_ENABLED
+      MaximumExecutionFrequency: One_Hour #Atin: 24 hours
+
+  CheckForIAMUserConsoleMFA:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForIAMUserConsoleMFA
+      Description: Disallow console access to IAM users without MFA - Checks whether AWS Multi-Factor Authentication (MFA) is enabled for all AWS Identity and Access Management (IAM) users that use a console password. The rule is COMPLIANT if MFA is enabled.
+      Source:
+        Owner: AWS
+        SourceIdentifier: MFA_ENABLED_FOR_IAM_CONSOLE_ACCESS
+      MaximumExecutionFrequency: One_Hour
+
+  CheckForRdsPublicAccess:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForRdsPublicAccess
+      Description: Disallow public access to RDS database instances - Checks whether the Amazon Relational Database Service (RDS) instances are not publicly accessible. The rule is non-compliant if the publiclyAccessible field is true in the instance configuration item.
+      Source:
+        Owner: AWS
+        SourceIdentifier: RDS_INSTANCE_PUBLIC_ACCESS_CHECK
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::RDS::DBInstance
+
+  CheckForPublicRdsSnapshots:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForPublicRdsSnapshots
+      Description: Disallow public access to RDS database snapshots - Checks if Amazon Relational Database Service (Amazon RDS) snapshots are public. The rule is non-compliant if any existing and new Amazon RDS snapshots are public.
+      Source:
+        Owner: AWS
+        SourceIdentifier: RDS_SNAPSHOTS_PUBLIC_PROHIBITED
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::RDS::DBSnapshot
+
+  CheckForRdsStorageEncryption:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForRdsStorageEncryption
+      Description: Disallow RDS database instances that are not storage encrypted - Checks whether storage encryption is enabled for your RDS DB instances.
+      Source:
+        Owner: AWS
+        SourceIdentifier: RDS_STORAGE_ENCRYPTED
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::RDS::DBInstance
+
+  CheckForRestrictedCommonPortsPolicy:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForRestrictedCommonPortsPolicy
+      Description: Disallow internet connection through RDP - Checks whether security groups that are in use disallow unrestricted incoming TCP traffic to the specified ports.
+      InputParameters:
+        blockedPort1: 20
+        blockedPort2: 21
+        blockedPort3: 3389
+        blockedPort4: 3306
+        blockedPort5: 4333
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::EC2::SecurityGroup
+      Source:
+        Owner: AWS
+        SourceIdentifier: RESTRICTED_INCOMING_TRAFFIC
+
+  CheckForRestrictedSshPolicy:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForRestrictedSshPolicy
+      Description: Disallow internet connection through SSH - Checks whether security groups that are in use disallow unrestricted incoming SSH traffic.
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::EC2::SecurityGroup
+      Source:
+        Owner: AWS
+        SourceIdentifier: INCOMING_SSH_DISABLED
+
+  CheckForRootMfa:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForRootMfa
+      Description: Enable MFA for the root user - Checks whether the root user of your AWS account requires multi-factor authentication for console sign-in.
+      Source:
+        Owner: AWS
+        SourceIdentifier: ROOT_ACCOUNT_MFA_ENABLED
+      MaximumExecutionFrequency: One_Hour
+
+  CheckForS3PublicRead:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForS3PublicRead
+      Description: Disallow public read access to S3 buckets - Checks that your S3 buckets do not allow public read access. If an S3 bucket policy or bucket ACL allows public read access, the bucket is noncompliant.
+      Source:
+        Owner: AWS
+        SourceIdentifier: S3_BUCKET_PUBLIC_READ_PROHIBITED
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::S3::Bucket
+
+  CheckForS3PublicWrite:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForS3PublicWrite
+      Description: Disallow public write access to S3 buckets - Checks that your S3 buckets do not allow public write access. If an S3 bucket policy or bucket ACL allows public write access, the bucket is noncompliant.
+      Source:
+        Owner: AWS
+        SourceIdentifier: S3_BUCKET_PUBLIC_WRITE_PROHIBITED
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::S3::Bucket
+
+  CheckForS3VersioningEnabled:
+    Condition: ShallConfigRulesEnabled
+    Type: AWS::Config::ConfigRule
+
+    Properties:
+      ConfigRuleName: CheckForS3VersioningEnabled
+      Description: Disallow S3 buckets that are not versioning enabled - Checks whether versioning is enabled for your S3 buckets.
+      Source:
+        Owner: AWS
+        SourceIdentifier: S3_BUCKET_VERSIONING_ENABLED
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::S3::Bucket
+
+  # ____________________________________________________________________________________________________________________________________________________________________________________________________________
+  cloudtrailKeyAlias:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/cloudtrail
+      TargetKeyId: !Ref cloudtrailKey
+
+  TrailBucket:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${CustomerName}-cloudtrail-${AWS::AccountId}-logs'
+      LifecycleConfiguration: 
+        Rules:
+          - Id: !Sub "${CustomerName}-cloudtrail-lifecycle-rule"
+            ExpirationInDays: 180
+            Status: Enabled
+
+  TrailBucketPolicy:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref TrailBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: 'cloudtrail.amazonaws.com'
+            Action: 's3:GetBucketAcl'
+            Resource: !Sub 'arn:aws:s3:::${TrailBucket}'
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: 'cloudtrail.amazonaws.com'
+            Action: 's3:PutObject'
+            Resource: !Sub 'arn:aws:s3:::${TrailBucket}/AWSLogs/${AWS::AccountId}/*'
+            Condition:
+              StringEquals:
+                's3:x-amz-acl': 'bucket-owner-full-control'
+          - Sid: AllowSSLRequestsOnly
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt 'TrailBucket.Arn'
+              - !Sub '${TrailBucket.Arn}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': false
+
+  EventSNSTopic:
+    Type: 'AWS::SNS::Topic'
+    DeletionPolicy: Delete
+    Properties:
+      TopicName: !Sub '${CustomerName}-AccountHardeningTopic'
+      Subscription:
+        - Endpoint: !Ref SubscribeTo
+          Protocol: email
+
+  EventTopicPolicy:
+    Type: 'AWS::SNS::TopicPolicy'
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSCloudTrailSNSPolicy
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Resource: !Ref EventSNSTopic
+            Action: 'sns:Publish'
+      Topics:
+        - !Ref EventSNSTopic
+
+  Trail:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: 'AWS::CloudTrail::Trail'
+    Properties:
+      IncludeGlobalServiceEvents: true
+      IsLogging: true
+      IsMultiRegionTrail: true
+      EventSelectors: !If [IsS3DataEvents, [{DataResources: [{Type: 'AWS::S3::Object', Values: ['arn:aws:s3:::']}], IncludeManagementEvents: true, ReadWriteType: All}], !Ref 'AWS::NoValue']
+      KMSKeyId: !Ref cloudtrailKeyAlias
+      S3BucketName: !Ref TrailBucket
+      EnableLogFileValidation: true
+      #CloudWatchLogsLogGroupArn: !Ref 'AWS::NoValue'
+      #CloudWatchLogsRoleArn: !Ref 'AWS::NoValue'
+      TrailName: !Sub '${CustomerName}-Trail'
+
+  # ConsoleLogin Auth
+  EventRule0:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventName:
+            - ConsoleLogin
+          errorMessage:
+            - Failed authentication
+      Name: ManagementConsoleAuthFailure-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |
+              "Failed Console Login detected"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "SourceIP: <ip>"
+
+  # MFA
+  EventRule1:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventName:
+            - ConsoleLogin
+          additionalEventData:
+            MFAUsed:
+              - 'No'
+      Name: NonMfaConsoleLogin-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Console SignIn Detected without MFA"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "SourceIP: <ip>"
+
+  # AWS Event
+  EventRule2:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventType:
+            - anything-but:
+                - AwsServiceEvent
+          userIdentity:
+            type:
+              - Root
+            invokedBy:
+              - exists: false
+      Name: RootUserActivity-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Activity from Root user detected"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # IAM POLICY OPERATIONS
+  EventRule3:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventName:
+            - DeleteGroupPolicy
+            - DeleteRolePolicy
+            - DeleteUserPolicy
+            - PutGroupPolicy
+            - PutRolePolicy
+            - PutUserPolicy
+            - CreatePolicy
+            - DeletePolicy
+            - CreatePolicyVersion
+            - DeletePolicyVersion
+            - AttachRolePolicy
+            - DetachRolePolicy
+            - AttachUserPolicy
+            - DetachUserPolicy
+            - AttachGroupPolicy
+            - DetachGroupPolicy
+          sourceIPAddress:
+            - wildcard: '*.*.*.*'
+      Name: IamPolicyChange-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Changes are detected on IAM"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # TRAIL OPERATIONS
+  EventRule4:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventName:
+            # - CreateTrail
+            - UpdateTrail
+            - DeleteTrail
+            # - StartLogging
+            - StopLogging
+      Name: CloudTrailConfigChange-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Changes are detected on CloudTrail"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # KMS
+  EventRule5:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventSource:
+            - kms.amazonaws.com
+          eventName:
+            - DisableKey
+            - ScheduleKeyDeletion
+      Name: DeletingKmsCmk-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Changes are detected on KMS"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # S3 Policy
+  EventRule6:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventSource:
+            - s3.amazonaws.com
+          eventName:
+            - PutBucketAcl
+            - PutBucketPolicy
+            - PutBucketCors
+            - PutBucketLifecycle
+            - PutBucketReplication
+            - DeleteBucketPolicy
+            - DeleteBucketCors
+            - DeleteBucketLifecycle
+            - DeleteBucketReplication
+      Name: S3BucketPolicyChange-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Changes are detected on S3 Bucket Policy"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # Console Login
+  EventRule7:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          errorCode:
+            - UnauthorizedOperation
+            - AccessDenied
+          readOnly:
+            - false
+      Name: UnauthorizedOperation-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Unauthorized action detected"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # Config
+  EventRule8:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventSource:
+            - config.amazonaws.com
+          eventName:
+            - StopConfigurationRecorder
+            - DeleteDeliveryChannel
+            - PutDeliveryChannel
+            - PutConfigurationRecorder
+      Name: ConfigChange-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Changes are detected on AWS Config"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # SECURITY Group
+  EventRule9:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventName:
+            - AuthorizeSecurityGroupIngress
+            - AuthorizeSecurityGroupEgress
+            - RevokeSecurityGroupIngress
+            - RevokeSecurityGroupEgress
+            - CreateSecurityGroup
+            - DeleteSecurityGroup
+          sourceIPAddress:
+            - wildcard: '*.*.*.*'
+      Name: SecurityGroupChange-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Changes are detected on Security Group"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time: <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # NACL Operations
+  EventRule10:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventName:
+            - CreateNetworkAcl
+            - CreateNetworkAclEntry
+            - DeleteNetworkAcl
+            - DeleteNetworkAclEntry
+            - ReplaceNetworkAclEntry
+            - ReplaceNetworkAclAssociation
+      Name: NaclChange-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Changes are detected on NACL"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # Gateways
+  EventRule11:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventName:
+            - CreateCustomerGateway
+            - DeleteCustomerGateway
+            - AttachInternetGateway
+            - CreateInternetGateway
+            - DeleteInternetGateway
+            - DetachInternetGateway
+      Name: NetworkGatewayChange-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Changes are detected on NetworkGateway"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # Routes
+  EventRule12:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventName:
+            - CreateRoute
+            - CreateRouteTable
+            - ReplaceRoute
+            - ReplaceRouteTableAssociation
+            - DeleteRouteTable
+            - DeleteRoute
+            - DisassociateRouteTable
+      Name: RouteTableChange-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Changes are detected on Route Table"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # VPC
+  EventRule13:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventName:
+            - CreateVpc
+            - DeleteVpc
+            - ModifyVpcAttribute
+            - AcceptVpcPeeringConnection
+            - CreateVpcPeeringConnection
+            - DeleteVpcPeeringConnection
+            - RejectVpcPeeringConnection
+            - AttachClassicLinkVpc
+            - DetachClassicLinkVpc
+            - DisableVpcClassicLink
+            - EnableVpcClassicLink
+      Name: VpcChange-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.requestParameters
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Changes are detected on VPC"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Change Details: <request>"
+
+  # EC2
+  EventRule14:
+    Condition: ShallCloudtrailRulesEnabled
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: default
+      EventPattern:
+        detail:
+          eventName:
+            - RunInstances
+            # - RebootInstances
+            # - StartInstances
+            # - StopInstances
+            # - TerminateInstances
+          requestParameters:
+            instanceType:
+              - suffix: 32xlarge
+              - suffix: 24xlarge
+              - suffix: 18xlarge
+              - suffix: 16xlarge
+              - suffix: 12xlarge
+              - suffix: 10xlarge
+              - suffix: 9xlarge
+              - suffix: 8xlarge
+              - suffix: 4xlarge
+      Name: EC2LargeInstanceEvent-cloudtrail
+      State: ENABLED
+      Targets:
+        - Id: Ided1f1ebb-b84b-4f51-9d7c-0bcf41065099
+          Arn: !Ref EventSNSTopic
+          InputTransformer:
+            InputPathsMap:
+              accountID: $.account
+              action: $.detail.eventName
+              instanceType: $.detail.responseElements.instancesSet.items[0].instanceType
+              ip: $.detail.sourceIPAddress
+              region: $.detail.awsRegion
+              request: $.detail.responseElements.instancesSet.items[0].instanceId
+              time: $.detail.eventTime
+              user: $.detail.userIdentity.arn
+            InputTemplate: !Sub |-
+              "Large Instance launch is detected"
+
+              "AWS Account ID: <accountID>"
+              "Account Name: ${CustomerName}"
+              "Action Performed: <action>"
+              "Time (UTC): <time>"
+              "Action Performed By: <user>"
+              "Region: <region>"
+              "SourceIP: <ip>"
+              "Instance Details: <request>, <instanceType>"
+
+  #-----------------------------------------------------------------------------------------------------------------------------------------
+
+  # Iam Password Policy
+
+  IamPasswordPolicy:
+    Condition: IsIAMPasswordPolicyEnabled
+    Type: 'Custom::PasswordPolicy'
+    Properties:
+      AllowUsersToChangePassword: 'true'
+      MaxPasswordAge: 90
+      MinimumPasswordLength: 10
+      PasswordReusePrevention: 5
+      RequireLowercaseCharacters: 'true'
+      RequireNumbers: 'true'
+      RequireSymbols: 'true'
+      RequireUppercaseCharacters: 'true'
+      ServiceToken: !GetAtt
+        - IamPasswordPolicyLambda
+        - Arn
+
+  IamPasswordPolicyLambdaRole:
+    Condition: IsIAMPasswordPolicyEnabled
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: iam
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'iam:UpdateAccountPasswordPolicy'
+                  - 'iam:DeleteAccountPasswordPolicy'
+                Resource: '*'
+
+  IamPasswordPolicyLambda:
+    Condition: IsIAMPasswordPolicyEnabled
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        ZipFile: >-
+          'use strict';
+
+          const AWS = require('aws-sdk');
+
+          const response = require('cfn-response');
+
+          const iam = new AWS.IAM({apiVersion: '2010-05-08'});
+
+          exports.handler = (event, context, cb) => {
+
+          console.log(`Invoke: ${JSON.stringify(event)}`);
+
+          const done = (err) => {
+            if (err) {
+              console.log(`Error: ${JSON.stringify(err)}`);
+              response.send(event, context, response.FAILED, {}, event.PhysicalResourceId);
+            } else {
+              response.send(event, context, response.SUCCESS, {}, event.PhysicalResourceId );
+            }
+          };
+
+          if (event.RequestType === 'Delete') {
+            iam.deleteAccountPasswordPolicy({}, done);
+          } else if (event.RequestType === 'Create' || event.RequestType ===
+          'Update') {
+            let params = {
+              AllowUsersToChangePassword: event.ResourceProperties.AllowUsersToChangePassword === 'true',
+              HardExpiry: event.ResourceProperties.HardExpiry === 'true',
+              MinimumPasswordLength: parseInt(event.ResourceProperties.MinimumPasswordLength, 10),
+              RequireLowercaseCharacters: event.ResourceProperties.RequireLowercaseCharacters === 'true',
+              RequireNumbers: event.ResourceProperties.RequireNumbers === 'true',
+              RequireSymbols: event.ResourceProperties.RequireSymbols === 'true',
+              RequireUppercaseCharacters: event.ResourceProperties.RequireUppercaseCharacters === 'true',
+            };
+            if (parseInt(event.ResourceProperties.MaxPasswordAge, 10) > 0) {
+              params.MaxPasswordAge = parseInt(event.ResourceProperties.MaxPasswordAge, 10);
+            }
+            if (parseInt(event.ResourceProperties.PasswordReusePrevention, 10) > 0) {
+              params.PasswordReusePrevention = parseInt(event.ResourceProperties.PasswordReusePrevention, 10);
+            }
+            iam.updateAccountPasswordPolicy(params, done);
+          } else {
+            cb(new Error(`unsupported RequestType: ${event.RequestType}`));
+          }
+
+          };
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt
+        - IamPasswordPolicyLambdaRole
+        - Arn
+      Runtime: nodejs16.x
+      Timeout: 60
+
+  #-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+  # Budget Alarm
+
+  Budget:
+    Condition: IsBudgetAlarmEnabled
+    Type: "AWS::Budgets::Budget"
+    Properties:
+      Budget:
+        BudgetName: !Sub '${CustomerName}-Budget-Alarm'
+        BudgetType: "COST"
+        BudgetLimit:
+          Amount: !Ref BudgetAlarmLimitAmount
+          Unit: "USD"
+        TimeUnit: "MONTHLY"
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: "ACTUAL"
+            ComparisonOperator: "GREATER_THAN"
+            Threshold: "80"
+            ThresholdType: "PERCENTAGE"
+          Subscribers:
+            - SubscriptionType: "SNS"
+              Address: !Ref EventSNSTopic
+        - Notification:
+            NotificationType: "ACTUAL"
+            ComparisonOperator: "GREATER_THAN"
+            Threshold: "90"
+            ThresholdType: "PERCENTAGE"
+          Subscribers:
+            - SubscriptionType: "SNS"
+              Address: !Ref EventSNSTopic
+        - Notification:
+            NotificationType: "FORECASTED"
+            ComparisonOperator: "GREATER_THAN"
+            Threshold: "100"
+            ThresholdType: "PERCENTAGE"
+          Subscribers:
+            - SubscriptionType: "SNS"
+              Address: !Ref EventSNSTopic
+

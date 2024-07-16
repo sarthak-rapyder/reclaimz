@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template to create KMS key'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'KMS key Parameters'
+        Parameters:
+          - MultiRegion
+
+Parameters:
+  ProjectName:
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String  
+  Environment:
+    Description: Environment (dev, staging, qa, prod)
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String    
+  MultiRegion:
+    Type: String
+    Description: Enable Multi-Region key (true or false)
+    Default: false
+    AllowedValues:
+      - true
+      - false
+    ConstraintDescription: must be true or false.    
+
+Resources:    
+  KMSKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      Description: A multi-Region primary key
+      MultiRegion: !Ref MultiRegion
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "kms-key" ] ]
+        - Key: Environment
+          Value: !Ref Environment 
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName          
+  KMSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Join [ "-", [ "alias/kms", !Ref ProjectName, !Ref Environment, "key" ] ]
+      TargetKeyId: !Ref KMSKey
+        
+
+Outputs:
+  KmsKeyId:
+    Value: !Ref KMSKey
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "kms-key-Id" ] ]          

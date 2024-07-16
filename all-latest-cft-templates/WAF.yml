@@ -1,0 +1,448 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template to create AWS WAF (Web Application Firewall)'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'Project Name and Environment'
+      Parameters:
+      - ProjectName
+      - Environment
+      - TenantType
+    - Label:
+        default: 'WAF Parameters'
+      Parameters:
+      - Scope
+      - RateLimitEffect
+      - RateLimit
+      - AWSManagedRulesAmazonIpReputationList
+      - AWSManagedRulesBotControlRuleSet
+      - AWSManagedRulesCommonRuleSet
+      - AWSManagedRulesSQLiRuleSet
+      - AWSManagedRulesKnownBadInputsRuleSet
+      - AWSManagedRulesAnonymousIpList
+      - EnableBothOperatingSystem
+      - LinuxOperatingSystem
+      - WindowsOperatingSystem
+      - AdminProtection
+      - CoreRuleSet
+      - PHPApplication
+      - POSIXOperatingSystem
+      - WordPressApplication
+Parameters:
+  ProjectName:
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String  
+  Environment:
+    Description: Environment (dev, staging, qa, prod)
+    Type: String
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String     
+  Scope:
+    Description: 'Specify wether WAF shall be used with CloudFront (us-east-1 only!) or regional (ALB, API Gateway, and AppSync).'
+    Type: String
+    Default: 'REGIONAL'
+    AllowedValues:
+    - 'REGIONAL'
+    - 'CLOUDFRONT'
+  RateLimit:
+    Description: 'The maximum number of requests from a single IP address that are allowed in a five-minute period.'
+    Type: Number
+    Default: 100
+    ConstraintDescription: 'Value must be between 100 - 20000000'
+    MinValue: 100
+    MaxValue: 20000000
+  RateLimitEffect:
+    Description: 'Block or count requests that exceed the rate limit. Alterantively, disable rate limiting at all.'
+    Type: String
+    Default: 'Block'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  AWSManagedRulesAmazonIpReputationList:
+    Description: 'Block or count requests with bad reputation. Alterantively, disable reputation list at all.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  AWSManagedRulesBotControlRuleSet:
+    Description: 'Block or count requests from bots. Alterantively, disable bot control at all. NOTE: THIS RULESET CHARGES USD 10/month'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  AWSManagedRulesCommonRuleSet:
+    Description: 'Block or count requests with vulnerabilities in OWASP. Alterantively, disable Common Rule Set at all.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  AWSManagedRulesSQLiRuleSet:
+    Description: 'Block or count requests with SQL Vulnerabilities. Alterantively, disable SQL Rule Set at all.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  AWSManagedRulesKnownBadInputsRuleSet:
+    Description: 'Block or count requests with Bad Inputs. Alterantively, disable Bad Input Rule Set at all.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  AWSManagedRulesAnonymousIpList:
+    Description: 'Block or count requests with Anonymous IP. Alterantively, disable Anonymous IP Rule Set at all.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  LinuxOperatingSystem:
+    Description: 'This will configure Linux.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Linux'
+  WindowsOperatingSystem:
+    Description: 'This will configure Windows.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Windows'
+  EnableBothOperatingSystem:
+    Description: 'This will configure both Linux and Windows.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Both'
+  AdminProtection:
+    Description: 'Contains rules that allow you to block external access to exposed admin pages.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  CoreRuleSet:
+    Description: 'Contains rules that are generally applicable to web applications.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  PHPApplication:
+    Description: 'Contains rules that block request patterns associated with exploiting vulnerabilities specific to the use of the PHP, including injection of unsafe PHP functions.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  POSIXOperatingSystem:
+    Description: 'Contains rules that block request patterns associated with exploiting vulnerabilities specific to POSIX/POSIX-like OS, including LFI attacks.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+  WordPressApplication:
+    Description: 'The WordPress Applications group contains rules that block request patterns associated with the exploitation of vulnerabilities specific to WordPress sites.'
+    Type: String
+    Default: 'Disable'
+    AllowedValues:
+    - 'Disable'
+    - 'Block'
+    - 'Count'
+Conditions:
+  EnableRateLimit: !Not [!Equals [!Ref RateLimitEffect, 'Disable']]
+  BlockRateLimit: !Equals [!Ref RateLimitEffect, 'Block']
+  EnableReputationList: !Not [!Equals [!Ref AWSManagedRulesAmazonIpReputationList, 'Disable']]
+  BlockReputationList: !Equals [!Ref AWSManagedRulesAmazonIpReputationList, 'Block']
+  EnableBotControl: !Not [!Equals [!Ref AWSManagedRulesBotControlRuleSet, 'Disable']]
+  BlockBotControl: !Equals [!Ref AWSManagedRulesBotControlRuleSet, 'Block']
+  EnableAWSManagedRulesCommonRuleSet: !Not [!Equals [!Ref AWSManagedRulesCommonRuleSet, 'Disable']]
+  BlockAWSManagedRulesCommonRuleSet: !Equals [!Ref AWSManagedRulesCommonRuleSet, 'Block']
+  EnableAWSManagedRulesSQLiRuleSet: !Not [!Equals [!Ref AWSManagedRulesSQLiRuleSet, 'Disable']]
+  BlockAWSManagedRulesSQLiRuleSet: !Equals [!Ref AWSManagedRulesSQLiRuleSet, 'Block']
+  EnableAWSManagedRulesKnownBadInputsRuleSet: !Not [!Equals [!Ref AWSManagedRulesKnownBadInputsRuleSet, 'Disable']]
+  BlockAWSManagedRulesKnownBadInputsRuleSet: !Equals [!Ref AWSManagedRulesKnownBadInputsRuleSet, 'Block']
+  EnableAWSManagedRulesAnonymousIpList: !Not [!Equals [!Ref AWSManagedRulesAnonymousIpList, 'Disable']]
+  BlockAWSManagedRulesAnonymousIpList: !Equals [!Ref AWSManagedRulesAnonymousIpList, 'Block']
+  # EnableOSRule: !Not [!Equals [!Ref EnableBothOperatingSystem, 'Both']]
+  IsLinux: !Or [!Equals [!Ref LinuxOperatingSystem, 'Linux'], !Equals [!Ref EnableBothOperatingSystem, 'Both']]
+  IsWindows: !Or [!Equals [!Ref WindowsOperatingSystem, 'Windows'], !Equals [!Ref EnableBothOperatingSystem, 'Both']]
+  EnableAdminProtection: !Not [!Equals [!Ref AdminProtection, 'Disable']]
+  BlockAdminProtection: !Equals [!Ref AdminProtection, 'Block']
+  EnableCoreRuleSet: !Not [!Equals [!Ref CoreRuleSet, 'Disable']]
+  BlockCoreRuleSet: !Equals [!Ref CoreRuleSet, 'Block']
+  EnablePHPApplication: !Not [!Equals [!Ref PHPApplication, 'Disable']]
+  BlockPHPApplication: !Equals [!Ref PHPApplication, 'Block']
+  EnablePOSIXOperatingSystem: !Not [!Equals [!Ref POSIXOperatingSystem, 'Disable']]
+  BlockPOSIXOperatingSystem: !Equals [!Ref POSIXOperatingSystem, 'Block']
+  EnableWordPressApplication: !Not [!Equals [!Ref WordPressApplication, 'Disable']]
+  BlockWordPressApplication: !Equals [!Ref WordPressApplication, 'Block']
+Resources:
+  WebACL:
+    Type: 'AWS::WAFv2::WebACL'
+    Properties:
+      DefaultAction:
+        Allow: {}
+      Description: !Sub 'A collection of WAF rules.'
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "waf" ] ]
+      Rules:
+        - !If
+          - EnableReputationList
+          - Name: AWS-AWSManagedRulesAmazonIpReputationList
+            Priority: 1
+            OverrideAction: !If
+            - BlockReputationList
+            - None: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: AWSManagedRulesAmazonIpReputationList
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesAmazonIpReputationList
+          - !Ref 'AWS::NoValue'
+        - !If
+          - EnableRateLimit
+          - Name: AWS-RateLimit
+            Priority: 8
+            Statement:
+              RateBasedStatement:
+                Limit: !Ref RateLimit
+                AggregateKeyType: IP
+            Action: !If
+            - BlockRateLimit
+            - Block: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: RateLimit
+          - !Ref 'AWS::NoValue'
+        - !If
+          - EnableBotControl
+          - Name: AWS-AWSManagedRulesBotControlRuleSet
+            Priority: 10
+            OverrideAction: !If
+            - BlockBotControl
+            - None: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: AWSManagedRulesBotControlRuleSet
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesBotControlRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - EnableAWSManagedRulesSQLiRuleSet
+          - Name: AWS-AWSManagedRulesSQLiRuleSet
+            Priority: 3
+            OverrideAction: !If
+            - BlockAWSManagedRulesSQLiRuleSet
+            - None: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: AWSManagedRulesSQLiRuleSet
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesSQLiRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - EnableAWSManagedRulesKnownBadInputsRuleSet
+          - Name: AWS-AWSManagedRulesKnownBadInputsRuleSet
+            Priority: 4
+            OverrideAction: !If
+            - BlockAWSManagedRulesKnownBadInputsRuleSet
+            - None: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: AWSManagedRulesKnownBadInputsRuleSet
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesKnownBadInputsRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - EnableAWSManagedRulesAnonymousIpList
+          - Name: AWS-AWSManagedRulesAnonymousIpList
+            Priority: 5
+            OverrideAction: !If
+            - BlockAWSManagedRulesAnonymousIpList
+            - None: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: AWSManagedRulesAnonymousIpList
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesAnonymousIpList
+          - !Ref 'AWS::NoValue'
+        - !If
+          - IsLinux
+          - Name: AWS-AWSManagedRulesLinuxRuleSet
+            Priority: 6
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: AWSManagedRulesLinuxRuleSet
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesLinuxRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - IsWindows
+          - Name: AWS-AWSManagedRulesWindowsRuleSet
+            Priority: 7
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: AWSManagedRulesWindowsRuleSet
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesWindowsRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - EnableAdminProtection
+          - Name: AWS-AWSManagedRulesAdminProtectionRuleSet
+            Priority: 9
+            OverrideAction: !If
+            - BlockAdminProtection
+            - None: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: AdminProtection
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesAdminProtectionRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - EnableCoreRuleSet
+          - Name: AWS-AWSManagedRulesCommonRuleSet
+            Priority: 12
+            OverrideAction: !If
+            - BlockCoreRuleSet
+            - None: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: CoreRuleSet
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesCommonRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - EnablePHPApplication
+          - Name: AWS-AWSManagedRulesPHPRuleSet
+            Priority: 11
+            OverrideAction: !If
+            - BlockPHPApplication
+            - None: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: PHPApplication
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesPHPRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - EnablePOSIXOperatingSystem
+          - Name: AWS-AWSManagedRulesUnixRuleSet
+            Priority: 13
+            OverrideAction: !If
+            - BlockPOSIXOperatingSystem
+            - None: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: POSIXOperatingSystem
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesUnixRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - EnableWordPressApplication
+          - Name: AWS-AWSManagedRulesWordPressRuleSet
+            Priority: 14
+            OverrideAction: !If
+            - BlockWordPressApplication
+            - None: {}
+            - Count: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: WordPressApplication
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesWordPressRuleSet
+          - !Ref 'AWS::NoValue'
+      Scope: !Ref Scope
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "waf" ] ]
+        SampledRequestsEnabled: true
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "waf" ] ]
+        - Key: Environment
+          Value: !Ref Environment   
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName         
+
+Outputs:
+  WebACL:
+    Description: 'The ARN of the Web ACL.'
+    Value: !GetAtt 'WebACL.Arn'
+    Export:
+      Name: !Join [ "-", [ !Ref ProjectName, !Ref Environment, "waf" ] ]
