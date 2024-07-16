@@ -1,0 +1,223 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This stack creates a ECS Fargate cluster, Namespace and ECS IAM role.
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'ECS Cluster Parameters'
+        Parameters:
+          - ClusterName
+          - ContainerInsights
+
+Parameters:
+  ProjectName:
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String  
+  Environment:
+    Description: Environment (ex- dev, staging, qa, prod)
+    Type: String  
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String  
+  ClusterName:
+    Description: The ECS Cluster Name.
+    Type: String       
+  ContainerInsights:
+    Description: The ECS Cluster container insights.
+    Type: String
+    Default: "enabled"
+ 
+Resources:       
+# ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ClusterName
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT      
+      ClusterSettings:
+        - Name: containerInsights
+          Value: !Ref ContainerInsights
+      ServiceConnectDefaults:
+        Namespace: !Ref ClusterName    
+      Tags:
+        - Key: Name
+          Value: !Ref ClusterName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName          
+
+  # This is an IAM role which authorizes ECS to manage resources on your account on your behalf, such as updating your load balancer with the
+  # details of where your containers are, so that traffic can reach your containers.
+  ECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join [ "-", [ !Ref ClusterName, "ECS-Role" ] ]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:AttachNetworkInterface
+                  - ec2:CreateNetworkInterface
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DeleteNetworkInterfacePermission
+                  - ec2:Describe*
+                  - ec2:DetachNetworkInterface
+                  - elasticloadbalancing:DeregisterInstancesFromLoadBalancer
+                  - elasticloadbalancing:DeregisterTargets
+                  - elasticloadbalancing:Describe*
+                  - elasticloadbalancing:RegisterInstancesWithLoadBalancer
+                  - elasticloadbalancing:RegisterTargets
+                Resource:
+                  - '*'                
+        - PolicyName: Amazons3FullAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:                
+                  - s3:*
+                  - s3-object-lambda:*
+                Resource:
+                  - '*'
+        - PolicyName: AmazonsqsFullAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:                
+                  - sqs:*
+                Resource:
+                  - '*'    
+        - PolicyName: AmazonsesFullAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:                
+                  - ses:*
+                Resource:
+                  - '*'
+        - PolicyName: AmazonmskFullAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:                
+                  - Kafka:*
+                  - kafka-cluster:*
+                Resource:
+                  - '*'                                        
+               
+
+#This is a role which is used by the ECS tasks themselves.
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join [ "-", [ !Ref ClusterName, "ECS-TaskExecution-Role" ] ]    
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - '*'
+        - PolicyName: rcz-create-log-group
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:                
+                  - logs:CreateLogGroup
+                Resource:
+                  - '*'                
+        - PolicyName: rcz-kms-decrypt
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:                
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource:
+                  - '*' 
+        - PolicyName: rcz-ssm-paramstore-access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:                
+                  - kms:Decrypt
+                  - ssm:GetParametersByPath
+                  - ssm:GetParameters
+                  - ssm:GetParameter
+                Resource:
+                  - '*'                  
+
+Outputs:
+  ClusterName:
+    Description: The name of the ECS cluster
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Join
+        - ':'
+        - - !Ref AWS::StackName
+          - ClusterName
+
+  ECSRole:
+    Description: The ARN of the ECS role
+    Value: !GetAtt ECSRole.Arn
+    Export:
+      Name: !Join
+        - ':'
+        - - !Ref AWS::StackName
+          - ECSRole
+
+  ECSTaskExecutionRole:
+    Description: The ARN of the ECS role
+    Value: !GetAtt ECSTaskExecutionRole.Arn
+    Export:
+      Name: !Join
+        - ':'
+        - - !Ref AWS::StackName
+          - ECSTaskExecutionRole
