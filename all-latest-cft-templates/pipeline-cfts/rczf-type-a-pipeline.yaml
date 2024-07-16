@@ -1,0 +1,304 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploys CodePipeline with Source, Codebuild and CFT Deploy Stages.
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: 'Project Name and Environment'
+        Parameters:
+          - ProjectName
+          - Environment
+          - TenantType
+      - Label:
+          default: 'Pipeline Parameters'
+        Parameters:
+          - S3BucketName
+          - VpcId
+          - PrivateSubnet1
+          - PrivateSubnet2
+          - CodestarConnectionArn
+          - ApplicationName
+          - ApplicationRepositoryID
+          - ApplicationRepositoryBranchName
+          - InfraRepositoryID
+          - InfraRepositoryBranchName
+          - CloudformationStackName
+          - CloudformationFilePath
+          - CloudformationStackParameterOverrides
+          - CloudFormationRole
+          - CodeBuildServiceRole
+          - CodePipelineServiceRole 
+          - KMSId
+
+Parameters:
+  ProjectName:
+    Description: Name of the Project (ex- rczf, rczh)
+    Type: String    
+  TenantType:
+    Description: Tenant Type of the project (ex- finance, health)
+    Type: String   
+  Environment:
+    Description: Environment (dev, staging, qa, prod)
+    Type: String
+    Default: qa     
+  S3BucketName:
+    Description: Type the S3 BucketName for storing artifacts.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    Default: default-codepipeline-artifact-bucket
+  VpcId:
+    Description: Type the VPC ID.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^vpc-[0-9a-f]{8,17}$
+  PrivateSubnet1:
+    Description: Type the PrivateSubnet1 ID in AZ-1a for CodeBuild.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^subnet-[0-9a-f]{8,17}$
+  PrivateSubnet2:
+    Description: Type the PrivateSubnet2 ID in AZ-1b for CodeBuild.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^subnet-[0-9a-f]{8,17}$
+  CodestarConnectionArn:
+    Description: Enter the foll ARN of the codestar connection for the Source.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^arn:aws:[a-zA-Z0-9-]+:[a-zA-Z0-9-]*:[0-9]*:[a-zA-Z0-9-:/]*$
+  ApplicationName:
+    Description: Type the application Name.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+    Default: default    
+  ApplicationRepositoryID:
+    Description: Type the FullName of the application repository for the CI Source 1.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+  ApplicationRepositoryBranchName:
+    Description: Type the BranchName of the application repository for the CI Source 1.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+  InfraRepositoryID:
+    Description: Type the FullName of the infra repository for the CI Source 2.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+  InfraRepositoryBranchName:
+    Description: Type the BranchName of the infra repository CI Source 2.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+  CloudformationStackName:
+    Description: Type the Cloudformation Stack name for the deployment.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/]*$
+  CloudformationFilePath:
+    Description: Enter the full path of Cloudformation stack.
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    AllowedPattern: ^[a-zA-Z0-9-_/.]*$
+  CloudformationStackParameterOverrides:
+    Description: (Optional)Enter the input parameters for the Cloudformation Stack in JSON* format.
+    Type: String
+    MinLength: 1
+  CloudFormationRole:
+    Description: Enter the full ARN of the IAM role to deploy Cloudformation stack.
+    Type: String
+    MinLength: 1
+    AllowedPattern: ^arn:aws:[a-zA-Z0-9-]+:[a-zA-Z0-9-]*:[0-9]*:[a-zA-Z0-9-:/]*$
+  CodeBuildServiceRole:
+    Description: Enter the full ARN of the CodeBuild Service IAM role.
+    Type: String   
+  CodePipelineServiceRole:    
+    Description: Enter the full ARN of the CodePipeline Service IAM role.
+    Type: String  
+  KMSId:
+    Description: Enter the KMS Key ARN.
+    Type: String    
+
+
+Resources:
+  CodeBuildSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the public facing load balancer
+      GroupName: !Join [ "-", [ !Ref ProjectName, !Ref TenantType, !Ref ApplicationName, "sg" ] ]
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        # Allow access all traffic from VPC to the internet
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "-1"
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Join [ "-", [ !Ref Environment, !Ref ApplicationName ] ]
+      Source:
+        Type: CODEPIPELINE
+        GitCloneDepth: 1
+        BuildSpec: buildspec.yml
+      Environment:
+        PrivilegedMode: true
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/standard:7.0
+        ComputeType: BUILD_GENERAL1_SMALL
+        EnvironmentVariables:
+          - Name: AWS_REGION
+            Type: PLAINTEXT
+            Value: us-east-2
+          - Name: CODEARTIFACT_DOMAIN
+            Type: PLAINTEXT
+            Value: artifactory
+          - Name: CODEARTIFACT_REPOSITORY
+            Type: PLAINTEXT
+            Value: release
+          - Name: SOURCE_AWS_ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: 767397957166
+          - Name: DESTINATION_AWS_ACCOUNT_ID
+            Type: PLAINTEXT
+            Value: 767397924905
+          - Name: NAME_SPACE
+            Type: PLAINTEXT
+            Value: com.reclaimz.finance
+          - Name: CODEARTIFACT_URL
+            Type: PLAINTEXT
+            Value: https://artifactory-767397957166.d.codeartifact.us-east-2.amazonaws.com
+          - Name: SERVICE_NAME
+            Type: PLAINTEXT
+            Value: !Ref ApplicationName
+      ServiceRole: !Ref CodeBuildServiceRole
+      VpcConfig:
+        VpcId: !Ref VpcId
+        Subnets:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        SecurityGroupIds:
+          - !Ref CodeBuildSG
+      Artifacts:
+        Type: CODEPIPELINE
+      # LogsConfig:
+      #   CloudWatchlogs:
+      #     Status: ENABLED
+      #     GroupName: !Join [ "-", [ !Ref Environment, !Ref ApplicationName, "codebuild-project-logs" ] ]
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref Environment, !Ref ApplicationName ] ]
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName
+
+  CodePipelineProject:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Join [ "-", [ !Ref Environment, !Ref ApplicationName ] ]
+      PipelineType: V2
+      ExecutionMode: QUEUED
+      RoleArn: !Ref CodePipelineServiceRole
+      Stages:
+        - Name: AppSource
+          Actions:
+            - Name: AppSource
+              InputArtifacts: []
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: '1'
+                Provider: CodeStarSourceConnection
+              OutputArtifacts:
+                - Name: AppSourceArtifact
+              Configuration:
+                BranchName: !Ref ApplicationRepositoryBranchName
+                ConnectionArn: !Ref CodestarConnectionArn
+                FullRepositoryId: !Ref ApplicationRepositoryID
+              RunOrder: 1
+            - Name: InfraSource
+              InputArtifacts: []
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: '1'
+                Provider: CodeStarSourceConnection
+              OutputArtifacts:
+                - Name: InfraSourceArtifact
+              Configuration:
+                BranchName: !Ref InfraRepositoryBranchName
+                ConnectionArn: !Ref CodestarConnectionArn
+                FullRepositoryId: !Ref InfraRepositoryID
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: Build
+              InputArtifacts:
+                - Name: AppSourceArtifact
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              OutputArtifacts:
+                - Name: BuildArtifact
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              RunOrder: 2
+        - Name: Deploy
+          Actions:
+            - Name: Deploy
+              InputArtifacts:
+                - Name: BuildArtifact
+                - Name: InfraSourceArtifact
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              OutputArtifacts:
+                - Name: OutputArtifact
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                Capabilities: CAPABILITY_IAM
+                ChangeSetName: !Ref CloudformationStackName
+                StackName: !Ref CloudformationStackName
+                ParameterOverrides: !Ref CloudformationStackParameterOverrides
+                RoleArn: !Ref CloudFormationRole
+                TemplatePath: !Sub InfraSourceArtifact::${CloudformationFilePath}
+              RunOrder: 3
+              Namespace: DeployVariables
+              Region: us-east-2
+              RoleArn: !Ref CloudFormationRole
+      ArtifactStore:
+        Location: !Ref S3BucketName
+        Type: S3
+        EncryptionKey: 
+          Id: !Ref KMSId
+          Type: KMS        
+      Tags:
+        - Key: Name
+          Value: !Join [ "-", [ !Ref Environment, !Ref ApplicationName ] ]
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: TenantType  
+          Value: !Ref TenantType
+        - Key: Project
+          Value: !Ref ProjectName        
