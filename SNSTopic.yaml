@@ -19,16 +19,18 @@ Parameters:
       - sqs
       - application
       - lambda
-    Default: sqs
-
-Mappings: {}
-
-Conditions: {}
+    Default: email
+    
+  SNSTopicName:
+    Description: Enter the Name for SNS Topic
+    Type: String     
 
 Resources:
   SNSTopic:
     Type: AWS::SNS::Topic
-    Properties: {}
+    Properties:
+      TopicName: !Ref SNSTopicName
+      DisplayName: !Ref SNSTopicName    
 
   SNSSubscription:
     Type: AWS::SNS::Subscription
